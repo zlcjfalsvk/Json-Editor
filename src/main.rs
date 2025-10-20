@@ -5,10 +5,11 @@
 use wgpu_canvas_editor::renderer::CanvasRenderer;
 use wgpu_canvas_editor::State;
 use winit::{
+    application::ApplicationHandler,
     event::*,
-    event_loop::EventLoop,
+    event_loop::{ActiveEventLoop, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
-    window::WindowBuilder,
+    window::{Window, WindowId},
 };
 
 fn main() {
@@ -17,67 +18,108 @@ fn main() {
 
     // Create event loop
     let event_loop = EventLoop::new().unwrap();
-    let window = WindowBuilder::new()
-        .with_title("WGPU Canvas Editor")
-        .with_inner_size(winit::dpi::LogicalSize::new(800, 600))
-        .build(&event_loop)
-        .unwrap();
-
-    // Create state and renderer
-    let mut state = pollster::block_on(State::new(&window));
-    let mut renderer = CanvasRenderer::new(&state.device, &state.config);
+    let mut app = App::new();
 
     // Run event loop
-    event_loop
-        .run(move |event, control_flow| match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window().id() => match event {
-                WindowEvent::CloseRequested
-                | WindowEvent::KeyboardInput {
-                    event:
-                        KeyEvent {
-                            state: ElementState::Pressed,
-                            physical_key: PhysicalKey::Code(KeyCode::Escape),
-                            ..
-                        },
-                    ..
-                } => {
-                    log::info!("Close requested");
-                    control_flow.exit();
-                }
-                WindowEvent::Resized(physical_size) => {
-                    log::info!("Resized to: {:?}", physical_size);
-                    state.resize(*physical_size);
-                }
-                WindowEvent::RedrawRequested => {
-                    state.update();
+    event_loop.run_app(&mut app).unwrap();
+}
 
-                    match render(&mut state, &renderer) {
-                        Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => {
-                            log::warn!("Surface lost, resizing");
-                            state.resize(state.size);
-                        }
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
-                            log::error!("Out of memory");
-                            control_flow.exit();
-                        }
-                        Err(e) => {
-                            log::error!("Render error: {:?}", e);
-                        }
+/// Application structure implementing ApplicationHandler
+struct App {
+    window: Option<Window>,
+    state: Option<State<'static>>,
+    renderer: Option<CanvasRenderer>,
+}
+
+impl App {
+    fn new() -> Self {
+        Self {
+            window: None,
+            state: None,
+            renderer: None,
+        }
+    }
+}
+
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_none() {
+            let window_attributes = Window::default_attributes()
+                .with_title("WGPU Canvas Editor")
+                .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
+
+            let window = event_loop.create_window(window_attributes).unwrap();
+
+            // SAFETY: The window must live as long as the state, which we ensure
+            // by storing both in the same struct
+            let state = pollster::block_on(unsafe {
+                State::new(std::mem::transmute::<&Window, &'static Window>(&window))
+            });
+            let renderer = CanvasRenderer::new(&state.device, &state.config);
+
+            self.state = Some(state);
+            self.renderer = Some(renderer);
+            self.window = Some(window);
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        let state = self.state.as_mut().unwrap();
+        let renderer = self.renderer.as_ref().unwrap();
+
+        match event {
+            WindowEvent::CloseRequested => {
+                log::info!("Close requested");
+                event_loop.exit();
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        state: ElementState::Pressed,
+                        physical_key: PhysicalKey::Code(KeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => {
+                log::info!("Escape pressed, closing");
+                event_loop.exit();
+            }
+            WindowEvent::Resized(physical_size) => {
+                log::info!("Resized to: {:?}", physical_size);
+                state.resize(physical_size);
+            }
+            WindowEvent::RedrawRequested => {
+                state.update();
+
+                match render(state, renderer) {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost) => {
+                        log::warn!("Surface lost, resizing");
+                        state.resize(state.size);
+                    }
+                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                        log::error!("Out of memory");
+                        event_loop.exit();
+                    }
+                    Err(e) => {
+                        log::error!("Render error: {:?}", e);
                     }
                 }
-                _ => {}
-            },
-            Event::AboutToWait => {
-                // Request redraw
-                state.window().request_redraw();
             }
             _ => {}
-        })
-        .unwrap();
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
 }
 
 /// Render a frame
