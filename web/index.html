@@ -131,36 +131,6 @@
         <p>Built with ❤️ using <a href="https://www.rust-lang.org/" target="_blank">Rust</a> and <a href="https://wgpu.rs/" target="_blank">wgpu</a></p>
     </footer>
 
-    <script type="module">
-        import init, { run } from './pkg/wgpu_canvas_editor.js';
-
-        async function main() {
-            try {
-                // Check for WebGPU support
-                if (!navigator.gpu) {
-                    throw new Error('WebGPU is not supported in this browser. Please use Chrome 113+, Firefox 121+, or Safari 18+.');
-                }
-
-                console.log('Initializing WASM module...');
-                await init();
-
-                console.log('Starting application...');
-                document.getElementById('loading').style.display = 'none';
-
-                await run();
-            } catch (error) {
-                console.error('Failed to initialize:', error);
-                document.getElementById('loading').innerHTML = `
-                    <div class="error">
-                        <h3>Error</h3>
-                        <p>${error.message}</p>
-                        <p>Please check the console for more details.</p>
-                    </div>
-                `;
-            }
-        }
-
-        main();
-    </script>
+    <script src="bundle.js"></script>
 </body>
 </html>
