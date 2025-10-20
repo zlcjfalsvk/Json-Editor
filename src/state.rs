@@ -37,7 +37,14 @@ impl<'a> State<'a> {
         let size = window.inner_size();
 
         // Create wgpu instance
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        #[cfg(target_arch = "wasm32")]
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::BROWSER_WEBGPU,
+            ..Default::default()
+        });
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
@@ -56,16 +63,22 @@ impl<'a> State<'a> {
             .unwrap();
 
         // Request device and queue
+        // WASM: Use downlevel_defaults for WebGPU compatibility
+        #[cfg(target_arch = "wasm32")]
+        let required_limits = wgpu::Limits::downlevel_defaults();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let required_limits = wgpu::Limits::default();
+
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits,
+                memory_hints: wgpu::MemoryHints::default(),
+                experimental_features: Default::default(),
+                trace: Default::default(),
+            })
             .await
             .unwrap();
 
@@ -160,6 +173,7 @@ impl<'a> State<'a> {
                         }),
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
