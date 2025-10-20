@@ -4,6 +4,8 @@ use serde_json::Value;
 pub struct JsonEditor {
     /// The raw JSON text being edited
     text: String,
+    /// Previous text for undo tracking
+    previous_text: String,
     /// Parsed JSON value (None if invalid)
     parsed_value: Option<Value>,
     /// Last validation error message
@@ -37,6 +39,7 @@ impl Default for JsonEditor {
 
         Self {
             text: default_json.to_string(),
+            previous_text: default_json.to_string(),
             parsed_value: serde_json::from_str(default_json).ok(),
             error_message: None,
             pretty_print: true,
@@ -60,6 +63,7 @@ impl JsonEditor {
     pub fn with_text(text: String) -> Self {
         let mut editor = Self {
             text: text.clone(),
+            previous_text: text.clone(),
             parsed_value: None,
             error_message: None,
             pretty_print: true,
@@ -100,7 +104,8 @@ impl JsonEditor {
     pub fn undo(&mut self) -> bool {
         if let Some(previous) = self.undo_stack.pop() {
             self.redo_stack.push(self.text.clone());
-            self.text = previous;
+            self.text = previous.clone();
+            self.previous_text = previous;
             self.validate();
             self.log_to_console("Undo");
             true
@@ -113,7 +118,8 @@ impl JsonEditor {
     pub fn redo(&mut self) -> bool {
         if let Some(next) = self.redo_stack.pop() {
             self.undo_stack.push(self.text.clone());
-            self.text = next;
+            self.text = next.clone();
+            self.previous_text = next;
             self.validate();
             self.log_to_console("Redo");
             true
@@ -179,7 +185,8 @@ impl JsonEditor {
         if let Some(ref value) = self.parsed_value
             && let Ok(pretty) = serde_json::to_string_pretty(value)
         {
-            self.text = pretty;
+            self.text = pretty.clone();
+            self.previous_text = pretty;
             self.log_to_console("Applied pretty print");
         }
     }
@@ -189,7 +196,8 @@ impl JsonEditor {
         if let Some(ref value) = self.parsed_value
             && let Ok(compact) = serde_json::to_string(value)
         {
-            self.text = compact;
+            self.text = compact.clone();
+            self.previous_text = compact;
             self.log_to_console("Applied compact format");
         }
     }
@@ -349,6 +357,16 @@ impl JsonEditor {
                     let response = ui.add(text_edit);
 
                     if response.changed() {
+                        // Push previous text to undo stack for per-character undo
+                        if self.text != self.previous_text {
+                            self.undo_stack.push(self.previous_text.clone());
+                            if self.undo_stack.len() > self.max_history {
+                                self.undo_stack.remove(0);
+                            }
+                            self.redo_stack.clear();
+                            self.previous_text = self.text.clone();
+                        }
+
                         let was_valid = self.is_valid();
                         self.validate();
                         self.log_to_console("Text changed");
