@@ -12,6 +12,16 @@ pub struct JsonEditor {
     pretty_print: bool,
     /// Current indentation level for pretty printing
     indent_size: usize,
+    /// Undo history stack
+    undo_stack: Vec<String>,
+    /// Redo history stack
+    redo_stack: Vec<String>,
+    /// Maximum history size
+    max_history: usize,
+    /// Show line numbers
+    show_line_numbers: bool,
+    /// Target line to scroll to (None if no scroll needed)
+    target_line: Option<usize>,
 }
 
 impl Default for JsonEditor {
@@ -31,6 +41,11 @@ impl Default for JsonEditor {
             error_message: None,
             pretty_print: true,
             indent_size: 2,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            max_history: 100,
+            show_line_numbers: true,
+            target_line: None,
         }
     }
 }
@@ -49,6 +64,11 @@ impl JsonEditor {
             error_message: None,
             pretty_print: true,
             indent_size: 2,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            max_history: 100,
+            show_line_numbers: true,
+            target_line: None,
         };
         editor.validate();
         editor
@@ -61,9 +81,66 @@ impl JsonEditor {
 
     /// Set new text content
     pub fn set_text(&mut self, text: String) {
+        self.push_undo();
         self.text = text;
         self.validate();
         self.log_to_console("JSON content updated");
+    }
+
+    /// Push current text to undo stack
+    fn push_undo(&mut self) {
+        self.undo_stack.push(self.text.clone());
+        if self.undo_stack.len() > self.max_history {
+            self.undo_stack.remove(0);
+        }
+        self.redo_stack.clear();
+    }
+
+    /// Undo last change
+    pub fn undo(&mut self) -> bool {
+        if let Some(previous) = self.undo_stack.pop() {
+            self.redo_stack.push(self.text.clone());
+            self.text = previous;
+            self.validate();
+            self.log_to_console("Undo");
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Redo last undone change
+    pub fn redo(&mut self) -> bool {
+        if let Some(next) = self.redo_stack.pop() {
+            self.undo_stack.push(self.text.clone());
+            self.text = next;
+            self.validate();
+            self.log_to_console("Redo");
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Can undo
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    /// Can redo
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+
+    /// Scroll to specific line
+    pub fn scroll_to_line(&mut self, line: usize) {
+        self.target_line = Some(line);
+        self.log_to_console(&format!("Scroll to line {}", line));
+    }
+
+    /// Toggle line numbers
+    pub fn toggle_line_numbers(&mut self) {
+        self.show_line_numbers = !self.show_line_numbers;
     }
 
     /// Validate the JSON syntax
@@ -158,14 +235,51 @@ impl JsonEditor {
 
         // Toolbar
         ui.horizontal(|ui| {
+            // Format buttons
             if ui.button("Pretty").clicked() && self.is_valid() {
+                self.push_undo();
                 self.apply_pretty_print();
                 changed = true;
             }
 
             if ui.button("Compact").clicked() && self.is_valid() {
+                self.push_undo();
                 self.apply_compact();
                 changed = true;
+            }
+
+            ui.separator();
+
+            // Edit buttons
+            if ui
+                .add_enabled(self.can_undo(), egui::Button::new("Undo"))
+                .clicked()
+            {
+                self.undo();
+                changed = true;
+            }
+
+            if ui
+                .add_enabled(self.can_redo(), egui::Button::new("Redo"))
+                .clicked()
+            {
+                self.redo();
+                changed = true;
+            }
+
+            ui.separator();
+
+            ui.separator();
+
+            // Line numbers toggle
+            if ui
+                .checkbox(&mut self.show_line_numbers, "Line Numbers")
+                .clicked()
+            {
+                self.log_to_console(&format!(
+                    "Line numbers: {}",
+                    if self.show_line_numbers { "on" } else { "off" }
+                ));
             }
 
             ui.separator();
@@ -185,28 +299,56 @@ impl JsonEditor {
             ui.colored_label(egui::Color32::RED, error);
         }
 
-        // Text editor with persistent ID
-        let response = ui.add(
-            egui::TextEdit::multiline(&mut self.text)
+        // Editor area with line numbers
+        let available_height = ui.available_height();
+
+        ui.horizontal(|ui| {
+            // Line numbers column
+            if self.show_line_numbers {
+                let line_count = self.text.lines().count();
+                let line_number_width = 40.0;
+
+                egui::ScrollArea::vertical()
+                    .id_salt("line_numbers")
+                    .max_height(available_height)
+                    .show(ui, |ui| {
+                        ui.set_width(line_number_width);
+                        for i in 1..=line_count {
+                            ui.colored_label(
+                                egui::Color32::from_gray(128),
+                                format!("{:>4}", i),
+                            );
+                        }
+                    });
+            }
+
+            // Text editor
+            egui::ScrollArea::vertical()
+                .id_salt("json_editor_scroll")
+                .max_height(available_height)
+                .show(ui, |ui| {
+            let text_edit = egui::TextEdit::multiline(&mut self.text)
                 .id(text_edit_id)
                 .font(egui::TextStyle::Monospace)
                 .desired_width(f32::INFINITY)
-                .desired_rows(30)
-                .code_editor(),
-        );
+                .code_editor();
 
-        if response.changed() {
-            let was_valid = self.is_valid();
-            self.validate();
-            self.log_to_console("Text changed");
-            changed = true;
+            let response = ui.add(text_edit);
 
-            // If validation failed, maintain focus on the text editor
-            if !self.is_valid() && was_valid {
-                ui.memory_mut(|mem| mem.request_focus(text_edit_id));
-                self.log_to_console("JSON validation failed - focus maintained");
+            if response.changed() {
+                let was_valid = self.is_valid();
+                self.validate();
+                self.log_to_console("Text changed");
+                changed = true;
+
+                // If validation failed, maintain focus on the text editor
+                if !self.is_valid() && was_valid {
+                    ui.memory_mut(|mem| mem.request_focus(text_edit_id));
+                    self.log_to_console("JSON validation failed - focus maintained");
+                }
             }
-        }
+            });
+        });
 
         changed
     }

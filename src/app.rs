@@ -14,6 +14,8 @@ pub struct App {
     left_panel_width: f32,
     /// Whether the graph has been initialized
     graph_initialized: bool,
+    /// Enable sync from graph to editor
+    sync_graph_to_editor: bool,
 }
 
 impl Default for App {
@@ -23,6 +25,7 @@ impl Default for App {
             json_graph: JsonGraph::new(),
             left_panel_width: 400.0,
             graph_initialized: false,
+            sync_graph_to_editor: true,
         }
     }
 }
@@ -43,6 +46,23 @@ impl App {
                 if ui.button("Reset Layout").clicked() {
                     self.left_panel_width = 400.0;
                     self.log_to_console("Layout reset");
+                }
+
+                ui.separator();
+
+                // Sync checkbox
+                if ui
+                    .checkbox(&mut self.sync_graph_to_editor, "Sync Graph → Editor")
+                    .clicked()
+                {
+                    self.log_to_console(&format!(
+                        "Graph to Editor sync: {}",
+                        if self.sync_graph_to_editor {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        }
+                    ));
                 }
             });
         });
