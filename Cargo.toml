@@ -2,7 +2,7 @@
 name = "wgpu-canvas-editor"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.90.0"
 authors = ["cheolcheol <zl6863vk@gmail.com>"]
 description = "A high-performance cross-platform canvas editor built with Rust and wgpu"
 license = "MIT"
@@ -23,7 +23,7 @@ bytemuck = { version = "1.18", features = ["derive"] }
 winit = { version = "0.30", features = ["rwh_05"] }
 
 # Async runtime
-pollster = "0.3"
+pollster = "0.4.0"
 
 # Logging
 env_logger = "0.11"
