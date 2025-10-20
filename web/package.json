@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "description": "Web frontend for WGPU Canvas Editor",
   "scripts": {
-    "build": "webpack --mode production",
+    "wasm:build": "cd .. && wasm-pack build --target web --out-dir web/pkg",
+    "wasm:dev": "cd .. && wasm-pack build --target web --dev --out-dir web/pkg",
+    "build": "npm run wasm:build && webpack --mode production",
+    "dev": "npm run wasm:dev && webpack serve --mode development --open",
+    "start": "npm run dev",
     "serve": "webpack serve --mode development --open",
     "clean": "rm -rf dist pkg"
   },
