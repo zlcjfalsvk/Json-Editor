@@ -1,0 +1,45 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock for libraries (uncomment for binaries)
+# Cargo.lock
+
+# WASM
+/pkg
+*.wasm
+wasm-pack.log
+
+# Node.js
+node_modules/
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Build outputs
+/web/dist
+/web/pkg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Testing
+/coverage
+
+# Environment
+.env
+.env.local
