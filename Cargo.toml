@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core graphics
-wgpu = "22.1"
+wgpu = "27.0"
 bytemuck = { version = "1.18", features = ["derive"] }
 
 # Window management (desktop)
