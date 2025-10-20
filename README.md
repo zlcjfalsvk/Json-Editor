@@ -60,41 +60,123 @@ wgpu-example/
 - wasm-pack: `cargo install wasm-pack`
 - Node.js 18+ and npm
 
-## Building and Running
+## Quick Start
 
 ### Desktop Application
 
-1. Build the project:
-```bash
-cargo build --release
-```
+The fastest way to get started:
 
-2. Run the application:
 ```bash
+# Clone the repository (if from a remote source)
+# git clone <repository-url>
+# cd wgpu-canvas-editor
+
+# Build and run
 cargo run --release
 ```
 
-The application will open a window displaying a basic triangle on the canvas.
+The application will open a window with an 800x600 canvas displaying a colorful triangle (red, green, blue vertices).
+
+**Controls:**
+- Press `ESC` to close the application
+- Window is resizable
 
 ### Web Application (WASM)
 
-1. Build the WASM module:
-```bash
-wasm-pack build --target web
-```
+Complete WASM build and deployment:
 
-2. Install web dependencies:
 ```bash
+# Step 1: Add the WASM target (first time only)
+rustup target add wasm32-unknown-unknown
+
+# Step 2: Install wasm-pack (first time only)
+cargo install wasm-pack
+
+# Step 3: Build the WASM module
+wasm-pack build --target web --release
+
+# Step 4: Install web dependencies
 cd web
 npm install
-```
 
-3. Start the development server:
-```bash
+# Step 5: Start the development server
 npm run serve
 ```
 
-4. Open your browser and navigate to `http://localhost:8080`
+The browser will automatically open to `http://localhost:8080` showing the canvas editor.
+
+**Note:** Ensure your browser supports WebGPU (Chrome 113+, Firefox 121+, Safari 18+).
+
+## Building and Running
+
+### Desktop Application - Detailed
+
+1. **Development build** (faster compilation, debug symbols):
+```bash
+cargo build
+cargo run
+```
+
+2. **Release build** (optimized, slower compilation):
+```bash
+cargo build --release
+cargo run --release
+```
+
+3. **With logging enabled**:
+```bash
+RUST_LOG=info cargo run
+# or for more verbose output
+RUST_LOG=debug cargo run
+```
+
+### Web Application (WASM) - Detailed
+
+1. **Install prerequisites** (one-time setup):
+```bash
+# Install Rust WASM target
+rustup target add wasm32-unknown-unknown
+
+# Install wasm-pack
+cargo install wasm-pack
+
+# Install Node.js dependencies
+cd web && npm install && cd ..
+```
+
+2. **Build the WASM module**:
+```bash
+# Development build
+wasm-pack build --target web --dev
+
+# Release build (optimized)
+wasm-pack build --target web --release
+```
+
+This creates a `pkg/` directory with:
+- `wgpu_canvas_editor_bg.wasm` - The WebAssembly binary
+- `wgpu_canvas_editor.js` - JavaScript bindings
+- `wgpu_canvas_editor.d.ts` - TypeScript definitions
+
+3. **Run the development server**:
+```bash
+cd web
+npm run serve
+```
+
+4. **Build for production**:
+```bash
+cd web
+npm run build
+```
+
+The production build will be in `web/dist/` and can be deployed to any static hosting service.
+
+5. **Clean build artifacts**:
+```bash
+cd web
+npm run clean
+```
 
 ### Running Tests
 
