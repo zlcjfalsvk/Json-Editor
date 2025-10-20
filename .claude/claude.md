@@ -135,12 +135,17 @@ src/
 
 ## Development Workflow
 
+### General Guidelines
+- **Dependency Management**: When adding new dependencies, always use the latest stable version from crates.io
+- **Version Control**: Make git commits for each logical unit of work to maintain a clear project history
+
 1. **Feature Development**
    - Create feature branch from main
    - Implement feature with tests
    - Run `cargo test` and `cargo clippy`
    - Format with `cargo fmt`
    - Test both desktop and WASM builds
+   - Commit changes for each completed work unit
 
 2. **Testing Strategy**
    - Unit tests in each module
