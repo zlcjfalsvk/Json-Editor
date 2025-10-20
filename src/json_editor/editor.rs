@@ -352,7 +352,9 @@ impl JsonEditor {
                         .id(text_edit_id)
                         .font(egui::TextStyle::Monospace)
                         .desired_width(f32::INFINITY)
-                        .code_editor();
+                        .code_editor()
+                        .char_limit(usize::MAX) // No character limit for JSON spec compliance
+                        .lock_focus(true); // Maintain focus for IME input (Korean, etc.)
 
                     let response = ui.add(text_edit);
 

@@ -79,12 +79,17 @@ impl App {
                 let changed = self.json_editor.ui(ui);
 
                 // Update graph if JSON changed and is valid
-                if changed
-                    && self.json_editor.is_valid()
-                    && let Some(value) = self.json_editor.parsed_value()
-                {
-                    self.json_graph.build_from_json(value);
-                    self.log_to_console("Graph updated from JSON");
+                // OR if graph hasn't been initialized yet but JSON is valid
+                if changed && self.json_editor.is_valid() {
+                    if let Some(value) = self.json_editor.parsed_value() {
+                        self.json_graph.build_from_json(value);
+                        self.graph_initialized = true;
+                        self.log_to_console("Graph updated from JSON");
+                    }
+                } else if changed && !self.json_editor.is_valid() {
+                    // Clear graph if JSON becomes invalid
+                    self.json_graph.build_from_json(&serde_json::Value::Null);
+                    self.log_to_console("Graph cleared - invalid JSON");
                 }
             });
 
