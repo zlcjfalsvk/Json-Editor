@@ -3,6 +3,7 @@
 /// This module implements the wgpu-based rendering pipeline for the canvas.
 
 use wgpu;
+use wgpu::util::DeviceExt;
 
 /// Vertex structure for rendering
 #[repr(C)]
