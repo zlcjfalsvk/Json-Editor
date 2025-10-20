@@ -8,13 +8,10 @@ This project demonstrates a modern approach to building graphics-intensive appli
 
 ## Screenshots
 
-### Desktop Application
-![Desktop Application](resources/standalone.png)
-*Native desktop application running with wgpu on Vulkan/Metal/DX12*
-
-### Web Application (WASM)
-![Web Application](resources/web.png)
-*Web application running in browser with WebGPU*
+| Desktop Application | Web Application (WASM) |
+|:-------------------:|:----------------------:|
+| ![Desktop](resources/standalone.png) | ![Web](resources/web.png) |
+| Native desktop application running with wgpu<br/>on Vulkan/Metal/DX12 | Web application running in browser<br/>with WebGPU |
 
 ## Features
 
