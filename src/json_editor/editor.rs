@@ -299,56 +299,69 @@ impl JsonEditor {
             ui.colored_label(egui::Color32::RED, error);
         }
 
-        // Editor area with line numbers
+        // Editor area with line numbers - use all available height
         let available_height = ui.available_height();
 
-        ui.horizontal(|ui| {
-            // Line numbers column
-            if self.show_line_numbers {
-                let line_count = self.text.lines().count();
-                let line_number_width = 40.0;
+        // Single ScrollArea containing both line numbers and editor
+        egui::ScrollArea::vertical()
+            .id_salt("json_editor_scroll")
+            .max_height(available_height)
+            .show(ui, |ui| {
+                ui.horizontal_top(|ui| {
+                    // Line numbers column
+                    if self.show_line_numbers {
+                        let line_count = self.text.lines().count();
+                        let line_number_width = 50.0;
 
-                egui::ScrollArea::vertical()
-                    .id_salt("line_numbers")
-                    .max_height(available_height)
-                    .show(ui, |ui| {
-                        ui.set_width(line_number_width);
-                        for i in 1..=line_count {
-                            ui.colored_label(
-                                egui::Color32::from_gray(128),
-                                format!("{:>4}", i),
-                            );
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(line_number_width, available_height),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.style_mut().spacing.item_spacing.y = 0.0;
+                                // Use fixed line height matching monospace font
+                                let line_height = 17.0;
+
+                                for i in 1..=line_count {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(line_number_width, line_height),
+                                        egui::Layout::top_down(egui::Align::Max),
+                                        |ui| {
+                                            ui.colored_label(
+                                                egui::Color32::from_gray(128),
+                                                format!("{:>4}", i),
+                                            );
+                                        },
+                                    );
+                                }
+                            },
+                        );
+
+                        ui.separator();
+                    }
+
+                    // Text editor - now using full available space
+                    let text_edit = egui::TextEdit::multiline(&mut self.text)
+                        .id(text_edit_id)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(f32::INFINITY)
+                        .code_editor();
+
+                    let response = ui.add(text_edit);
+
+                    if response.changed() {
+                        let was_valid = self.is_valid();
+                        self.validate();
+                        self.log_to_console("Text changed");
+                        changed = true;
+
+                        // If validation failed, maintain focus on the text editor
+                        if !self.is_valid() && was_valid {
+                            ui.memory_mut(|mem| mem.request_focus(text_edit_id));
+                            self.log_to_console("JSON validation failed - focus maintained");
                         }
-                    });
-            }
-
-            // Text editor
-            egui::ScrollArea::vertical()
-                .id_salt("json_editor_scroll")
-                .max_height(available_height)
-                .show(ui, |ui| {
-            let text_edit = egui::TextEdit::multiline(&mut self.text)
-                .id(text_edit_id)
-                .font(egui::TextStyle::Monospace)
-                .desired_width(f32::INFINITY)
-                .code_editor();
-
-            let response = ui.add(text_edit);
-
-            if response.changed() {
-                let was_valid = self.is_valid();
-                self.validate();
-                self.log_to_console("Text changed");
-                changed = true;
-
-                // If validation failed, maintain focus on the text editor
-                if !self.is_valid() && was_valid {
-                    ui.memory_mut(|mem| mem.request_focus(text_edit_id));
-                    self.log_to_console("JSON validation failed - focus maintained");
-                }
-            }
+                    }
+                });
             });
-        });
 
         changed
     }
