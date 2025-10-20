@@ -6,6 +6,16 @@ A high-performance, cross-platform canvas editor built with Rust and wgpu, inspi
 
 This project demonstrates a modern approach to building graphics-intensive applications that run on both desktop and web platforms using the same codebase. It leverages Rust's performance and safety guarantees along with wgpu's portable graphics API.
 
+## Screenshots
+
+### Desktop Application
+![Desktop Application](resources/standalone.png)
+*Native desktop application running with wgpu on Vulkan/Metal/DX12*
+
+### Web Application (WASM)
+![Web Application](resources/web.png)
+*Web application running in browser with WebGPU*
+
 ## Features
 
 - Cross-platform rendering (Desktop & Web via WASM)
