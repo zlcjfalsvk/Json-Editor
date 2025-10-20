@@ -1,7 +1,6 @@
 /// Desktop application entry point
 ///
 /// This is the main entry point for the desktop version of the canvas editor.
-
 use wgpu_canvas_editor::renderer::CanvasRenderer;
 use wgpu_canvas_editor::State;
 use winit::{

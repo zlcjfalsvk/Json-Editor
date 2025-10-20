@@ -1,7 +1,6 @@
 /// Integration tests for the canvas editor
 ///
 /// These tests verify the core functionality of the application.
-
 #[cfg(test)]
 mod tests {
     use wgpu_canvas_editor::input::InputHandler;

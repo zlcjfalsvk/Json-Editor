@@ -1,7 +1,6 @@
 /// Library and WASM entry point
 ///
 /// This module contains the common library code and WASM exports for the web version.
-
 pub mod input;
 pub mod renderer;
 pub mod state;
@@ -26,9 +25,9 @@ use winit::{
 use crate::renderer::CanvasRenderer;
 
 #[cfg(target_arch = "wasm32")]
-use std::rc::Rc;
-#[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
 
 /// Initialize the WASM application
 #[cfg(target_arch = "wasm32")]
@@ -99,8 +98,7 @@ impl ApplicationHandler for WasmApp {
             app_state.initializing = true;
             log::info!("Creating window...");
 
-            let window_attributes = Window::default_attributes()
-                .with_title("WGPU Canvas Editor");
+            let window_attributes = Window::default_attributes().with_title("WGPU Canvas Editor");
 
             let window = event_loop.create_window(window_attributes).unwrap();
 
@@ -133,7 +131,8 @@ impl ApplicationHandler for WasmApp {
                 // SAFETY: The window is stored in WasmAppState which is in an Rc,
                 // so it won't be moved or dropped while we're using it
                 let window_ref = unsafe { &*(window_ptr) };
-                let window_static = unsafe { std::mem::transmute::<&Window, &'static Window>(window_ref) };
+                let window_static =
+                    unsafe { std::mem::transmute::<&Window, &'static Window>(window_ref) };
 
                 let state = State::new(window_static).await;
                 let renderer = CanvasRenderer::new(&state.device, &state.config);
@@ -174,7 +173,9 @@ impl ApplicationHandler for WasmApp {
             }
             WindowEvent::RedrawRequested => {
                 // Destructure to get independent borrows of different fields
-                let WasmAppState { state, renderer, .. } = &mut *app_state;
+                let WasmAppState {
+                    state, renderer, ..
+                } = &mut *app_state;
 
                 if let (Some(state), Some(renderer)) = (state.as_mut(), renderer.as_ref()) {
                     state.update();

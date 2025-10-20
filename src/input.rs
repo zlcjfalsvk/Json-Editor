@@ -1,7 +1,6 @@
 /// Input event handling
 ///
 /// This module handles user input events such as keyboard and mouse interactions.
-
 use winit::event::{ElementState, KeyEvent, MouseButton};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
