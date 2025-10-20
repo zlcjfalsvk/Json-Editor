@@ -139,12 +139,52 @@ src/
 - **Dependency Management**: When adding new dependencies, always use the latest stable version from crates.io
 - **Version Control**: Make git commits for each logical unit of work to maintain a clear project history
 
+### Pre-Commit Verification Checklist
+
+Before making any git commit, **ALWAYS** verify the following items that would be checked by CI:
+
+1. **Code Formatting**
+   ```bash
+   cargo fmt --all -- --check
+   ```
+   If this fails, run `cargo fmt --all` to fix formatting issues.
+
+2. **Linting (Clippy)**
+   ```bash
+   cargo clippy --all-targets --all-features -- -D warnings
+   ```
+   Fix all warnings and errors before committing.
+
+3. **Tests**
+   ```bash
+   cargo test --all
+   ```
+   Ensure all tests pass. Add tests for new features.
+
+4. **Desktop Build**
+   ```bash
+   cargo build --release
+   cargo run
+   ```
+   Verify the application builds and runs correctly.
+
+5. **WASM Build** (if web-related changes)
+   ```bash
+   wasm-pack build --target web --out-dir web/pkg
+   cd web && npm run serve
+   ```
+   Test in a WebGPU-compatible browser (Chrome 113+, Firefox 121+, Safari 18+).
+
+6. **Documentation**
+   - Update relevant documentation if APIs changed
+   - Ensure doc comments are accurate and helpful
+
+**Note**: These checks mirror typical CI pipeline requirements. By running them locally before committing, you catch issues early and maintain code quality.
+
 1. **Feature Development**
    - Create feature branch from main
    - Implement feature with tests
-   - Run `cargo test` and `cargo clippy`
-   - Format with `cargo fmt`
-   - Test both desktop and WASM builds
+   - **Run pre-commit verification checklist**
    - Commit changes for each completed work unit
 
 2. **Testing Strategy**
