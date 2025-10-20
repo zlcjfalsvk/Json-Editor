@@ -1,5 +1,4 @@
 use wgpu_canvas_editor::State;
-use wgpu_canvas_editor::renderer::CanvasRenderer;
 use winit::{
     application::ApplicationHandler,
     event::*,
@@ -17,48 +16,47 @@ fn main() {
 
     // Create event loop
     let event_loop = EventLoop::new().unwrap();
-    let mut app = App::new();
+    let mut app = DesktopApp::new();
 
     // Run event loop
     event_loop.run_app(&mut app).unwrap();
 }
 
 /// Application structure implementing ApplicationHandler
-struct App {
+struct DesktopApp {
     window: Option<Window>,
     state: Option<State<'static>>,
-    renderer: Option<CanvasRenderer>,
 }
 
-impl App {
+impl DesktopApp {
     fn new() -> Self {
         Self {
             window: None,
             state: None,
-            renderer: None,
         }
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for DesktopApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = Window::default_attributes()
-                .with_title("WGPU Canvas Editor")
-                .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
+                .with_title("WGPU Canvas Editor - JSON Visualizer")
+                .with_inner_size(winit::dpi::LogicalSize::new(1200, 800));
 
             let window = event_loop.create_window(window_attributes).unwrap();
 
+            // Store window first
+            self.window = Some(window);
+
             // SAFETY: The window must live as long as the state, which we ensure
             // by storing both in the same struct
+            let window_ref = self.window.as_ref().unwrap();
             let state = pollster::block_on(unsafe {
-                State::new(std::mem::transmute::<&Window, &'static Window>(&window))
+                State::new(std::mem::transmute::<&Window, &'static Window>(window_ref))
             });
-            let renderer = CanvasRenderer::new(&state.device, &state.config);
 
             self.state = Some(state);
-            self.renderer = Some(renderer);
-            self.window = Some(window);
         }
     }
 
@@ -68,49 +66,61 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Skip if not initialized yet
+        if self.state.is_none() {
+            return;
+        }
+
         let state = self.state.as_mut().unwrap();
-        let renderer = self.renderer.as_ref().unwrap();
 
-        match event {
-            WindowEvent::CloseRequested => {
-                log::info!("Close requested");
-                event_loop.exit();
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state: ElementState::Pressed,
-                        physical_key: PhysicalKey::Code(KeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => {
-                log::info!("Escape pressed, closing");
-                event_loop.exit();
-            }
-            WindowEvent::Resized(physical_size) => {
-                log::info!("Resized to: {:?}", physical_size);
-                state.resize(physical_size);
-            }
-            WindowEvent::RedrawRequested => {
-                state.update();
+        // Let egui handle the event first
+        let handled = state.handle_event(&event);
 
-                match render(state, renderer) {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => {
-                        log::warn!("Surface lost, resizing");
-                        state.resize(state.size);
-                    }
-                    Err(wgpu::SurfaceError::OutOfMemory) => {
-                        log::error!("Out of memory");
-                        event_loop.exit();
-                    }
-                    Err(e) => {
-                        log::error!("Render error: {:?}", e);
-                    }
+        // If egui didn't handle it, process it ourselves
+        if !handled {
+            match event {
+                WindowEvent::CloseRequested => {
+                    log::info!("Close requested");
+                    event_loop.exit();
+                }
+                WindowEvent::KeyboardInput {
+                    event:
+                        KeyEvent {
+                            state: ElementState::Pressed,
+                            physical_key: PhysicalKey::Code(KeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => {
+                    log::info!("Escape pressed, closing");
+                    event_loop.exit();
+                }
+                WindowEvent::Resized(physical_size) => {
+                    log::info!("Resized to: {:?}", physical_size);
+                    state.resize(physical_size);
+                }
+                _ => {}
+            }
+        }
+
+        // Always handle redraw
+        if let WindowEvent::RedrawRequested = event {
+            state.update();
+
+            match state.render() {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost) => {
+                    log::warn!("Surface lost, resizing");
+                    state.resize(state.size);
+                }
+                Err(wgpu::SurfaceError::OutOfMemory) => {
+                    log::error!("Out of memory");
+                    event_loop.exit();
+                }
+                Err(e) => {
+                    log::error!("Render error: {:?}", e);
                 }
             }
-            _ => {}
         }
     }
 
@@ -119,26 +129,4 @@ impl ApplicationHandler for App {
             window.request_redraw();
         }
     }
-}
-
-/// Render a frame
-fn render(state: &mut State, renderer: &CanvasRenderer) -> Result<(), wgpu::SurfaceError> {
-    let output = state.surface.get_current_texture()?;
-    let view = output
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    let mut encoder = state
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
-
-    // Use the canvas renderer
-    renderer.render(&mut encoder, &view);
-
-    state.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-
-    Ok(())
 }

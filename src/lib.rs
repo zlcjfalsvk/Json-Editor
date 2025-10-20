@@ -1,10 +1,13 @@
 /// Library and WASM entry point
 ///
 /// This module contains the common library code and WASM exports for the web version.
+pub mod app;
 pub mod input;
+pub mod json_editor;
 pub mod renderer;
 pub mod state;
 
+pub use app::App;
 pub use state::State;
 
 // WASM-specific code
@@ -20,9 +23,6 @@ use winit::{
     platform::web::WindowExtWebSys,
     window::{Window, WindowId},
 };
-
-#[cfg(target_arch = "wasm32")]
-use crate::renderer::CanvasRenderer;
 
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
@@ -65,7 +65,6 @@ pub fn run() -> Result<(), JsValue> {
 struct WasmAppState {
     window: Option<Window>,
     state: Option<State<'static>>,
-    renderer: Option<CanvasRenderer>,
     initializing: bool,
 }
 
@@ -82,7 +81,6 @@ impl WasmApp {
             state: Rc::new(RefCell::new(WasmAppState {
                 window: None,
                 state: None,
-                renderer: None,
                 initializing: false,
             })),
         }
@@ -135,14 +133,12 @@ impl ApplicationHandler for WasmApp {
                     unsafe { std::mem::transmute::<&Window, &'static Window>(window_ref) };
 
                 let state = State::new(window_static).await;
-                let renderer = CanvasRenderer::new(&state.device, &state.config);
 
                 log::info!("WGPU initialized successfully!");
 
                 // Update the shared state
                 let mut app_state = state_clone.borrow_mut();
                 app_state.state = Some(state);
-                app_state.renderer = Some(renderer);
             });
         }
     }
@@ -160,43 +156,44 @@ impl ApplicationHandler for WasmApp {
             return;
         }
 
-        match event {
-            WindowEvent::CloseRequested => {
-                log::info!("Close requested");
-                event_loop.exit();
-            }
-            WindowEvent::Resized(physical_size) => {
-                log::info!("Resized to: {:?}", physical_size);
-                if let Some(state) = app_state.state.as_mut() {
+        let state = app_state.state.as_mut().unwrap();
+
+        // Let egui handle the event first
+        let handled = state.handle_event(&event);
+
+        // If egui didn't handle it, process it ourselves
+        if !handled {
+            match event {
+                WindowEvent::CloseRequested => {
+                    log::info!("Close requested");
+                    event_loop.exit();
+                }
+                WindowEvent::Resized(physical_size) => {
+                    log::info!("Resized to: {:?}", physical_size);
                     state.resize(physical_size);
                 }
+                _ => {}
             }
-            WindowEvent::RedrawRequested => {
-                // Destructure to get independent borrows of different fields
-                let WasmAppState {
-                    state, renderer, ..
-                } = &mut *app_state;
+        }
 
-                if let (Some(state), Some(renderer)) = (state.as_mut(), renderer.as_ref()) {
-                    state.update();
+        // Always handle redraw
+        if let WindowEvent::RedrawRequested = event {
+            state.update();
 
-                    match render(state, renderer) {
-                        Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => {
-                            log::warn!("Surface lost, resizing");
-                            state.resize(state.size);
-                        }
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
-                            log::error!("Out of memory");
-                            event_loop.exit();
-                        }
-                        Err(e) => {
-                            log::error!("Render error: {:?}", e);
-                        }
-                    }
+            match state.render() {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost) => {
+                    log::warn!("Surface lost, resizing");
+                    state.resize(state.size);
+                }
+                Err(wgpu::SurfaceError::OutOfMemory) => {
+                    log::error!("Out of memory");
+                    event_loop.exit();
+                }
+                Err(e) => {
+                    log::error!("Render error: {:?}", e);
                 }
             }
-            _ => {}
         }
     }
 
@@ -206,26 +203,4 @@ impl ApplicationHandler for WasmApp {
             window.request_redraw();
         }
     }
-}
-
-/// Render a frame (WASM)
-#[cfg(target_arch = "wasm32")]
-fn render(state: &mut State, renderer: &CanvasRenderer) -> Result<(), wgpu::SurfaceError> {
-    let output = state.surface.get_current_texture()?;
-    let view = output
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    let mut encoder = state
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
-
-    renderer.render(&mut encoder, &view);
-
-    state.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-
-    Ok(())
 }

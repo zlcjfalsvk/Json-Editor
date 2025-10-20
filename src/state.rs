@@ -2,8 +2,10 @@
 ///
 /// This module contains the core state management for the canvas editor.
 /// It maintains the application state and handles updates.
+use crate::app::App;
 use wgpu;
 use winit::dpi::PhysicalSize;
+use winit::event::WindowEvent;
 use winit::window::Window;
 
 /// Main application state
@@ -20,6 +22,14 @@ pub struct State<'a> {
     pub size: PhysicalSize<u32>,
     /// Reference to the window
     pub window: &'a Window,
+    /// egui context
+    pub egui_ctx: egui::Context,
+    /// egui-winit state
+    pub egui_state: egui_winit::State,
+    /// egui-wgpu renderer
+    pub egui_renderer: egui_wgpu::Renderer,
+    /// Application UI
+    pub app: App,
 }
 
 impl<'a> State<'a> {
@@ -106,6 +116,31 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
+        // Initialize egui
+        let egui_ctx = egui::Context::default();
+
+        // Get viewport info from window
+        let viewport_id = egui::ViewportId::ROOT;
+        let pixels_per_point = window.scale_factor() as f32;
+
+        let egui_state = egui_winit::State::new(
+            egui_ctx.clone(),
+            viewport_id,
+            window,
+            Some(pixels_per_point),
+            None,       // theme
+            Some(2048), // max_texture_side
+        );
+
+        let egui_renderer = egui_wgpu::Renderer::new(
+            &device,
+            surface_format,
+            egui_wgpu::RendererOptions::default(),
+        );
+
+        // Initialize application
+        let app = App::new();
+
         Self {
             surface,
             device,
@@ -113,6 +148,10 @@ impl<'a> State<'a> {
             config,
             size,
             window,
+            egui_ctx,
+            egui_state,
+            egui_renderer,
+            app,
         }
     }
 
@@ -135,12 +174,18 @@ impl<'a> State<'a> {
         }
     }
 
-    /// Update state (placeholder for future logic)
-    pub fn update(&mut self) {
-        // Future: Update animation, physics, etc.
+    /// Handle window event
+    pub fn handle_event(&mut self, event: &WindowEvent) -> bool {
+        self.egui_state.on_window_event(self.window, event).consumed
     }
 
-    /// Render the current frame
+    /// Update state
+    pub fn update(&mut self) {
+        // Placeholder for future animation/physics logic
+        // UI updates happen in render() via egui context
+    }
+
+    /// Render the current frame with egui
     ///
     /// # Returns
     ///
@@ -157,8 +202,42 @@ impl<'a> State<'a> {
                 label: Some("Render Encoder"),
             });
 
+        // Prepare egui
+        let raw_input = self.egui_state.take_egui_input(self.window);
+        let full_output = self.egui_ctx.run(raw_input, |ctx| {
+            self.app.update(ctx);
+        });
+
+        self.egui_state
+            .handle_platform_output(self.window, full_output.platform_output);
+
+        let tris = self
+            .egui_ctx
+            .tessellate(full_output.shapes, full_output.pixels_per_point);
+
+        // Upload egui texture
+        for (id, image_delta) in &full_output.textures_delta.set {
+            self.egui_renderer
+                .update_texture(&self.device, &self.queue, *id, image_delta);
+        }
+
+        // Update egui buffers
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: self.window.scale_factor() as f32,
+        };
+
+        self.egui_renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &tris,
+            &screen_descriptor,
+        );
+
+        // Render
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -178,6 +257,18 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+            // Render egui
+            self.egui_renderer.render(
+                &mut render_pass.forget_lifetime(),
+                &tris,
+                &screen_descriptor,
+            );
+        }
+
+        // Cleanup egui textures
+        for id in &full_output.textures_delta.free {
+            self.egui_renderer.free_texture(id);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
