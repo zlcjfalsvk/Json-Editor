@@ -1,8 +1,5 @@
-/// Desktop application entry point
-///
-/// This is the main entry point for the desktop version of the canvas editor.
-use wgpu_canvas_editor::renderer::CanvasRenderer;
 use wgpu_canvas_editor::State;
+use wgpu_canvas_editor::renderer::CanvasRenderer;
 use winit::{
     application::ApplicationHandler,
     event::*,
@@ -11,6 +8,9 @@ use winit::{
     window::{Window, WindowId},
 };
 
+/// Desktop application entry point
+///
+/// This is the main entry point for the desktop version of the canvas editor.
 fn main() {
     // Initialize logger
     env_logger::init();
