@@ -1531,14 +1531,14 @@ impl JsonGraph {
                         close_context_menu = true;
                     }
                 });
-
-            // Close menu if user clicks elsewhere
-            if ui.input(|i| i.pointer.any_click()) {
-                close_context_menu = true;
-            }
         }
 
         if close_context_menu {
+            self.context_menu = None;
+        }
+
+        // Close context menu if user clicks on the canvas (outside the menu)
+        if self.context_menu.is_some() && response.clicked() {
             self.context_menu = None;
         }
 
