@@ -6,6 +6,14 @@ A high-performance, cross-platform JSON editor built with Rust, wgpu, and egui. 
 
 This project demonstrates a modern approach to building graphics-intensive applications with rich UI that work seamlessly across desktop and web. It leverages Rust's performance and safety guarantees along with wgpu's portable graphics API and egui's immediate-mode GUI framework to deliver a VSCode-like JSON editing experience.
 
+## Live Demo
+
+**Try it now:** [https://zlcjfalsvk.github.io/Json-Editor/](https://zlcjfalsvk.github.io/Json-Editor/)
+
+The web version runs directly in your browser using WebAssembly and WebGPU. No installation required!
+
+> **Note:** Requires a WebGPU-compatible browser (Chrome 113+, Firefox 121+, Safari 18+)
+
 ## Screenshots
 
 | Desktop Application | Web Application (WASM) |
