@@ -2,6 +2,7 @@
 ///
 /// This module contains the main application UI logic using egui
 use crate::json_editor::{JsonEditor, JsonGraph};
+use crate::utils;
 use egui;
 
 /// Main application structure
@@ -45,7 +46,7 @@ impl App {
 
                 if ui.button("Reset Layout").clicked() {
                     self.left_panel_width = 400.0;
-                    self.log_to_console("Layout reset");
+                    utils::log("App", "Layout reset");
                 }
 
                 ui.separator();
@@ -55,14 +56,17 @@ impl App {
                     .checkbox(&mut self.sync_graph_to_editor, "Sync Graph → Editor")
                     .clicked()
                 {
-                    self.log_to_console(&format!(
-                        "Graph to Editor sync: {}",
-                        if self.sync_graph_to_editor {
-                            "enabled"
-                        } else {
-                            "disabled"
-                        }
-                    ));
+                    utils::log(
+                        "App",
+                        &format!(
+                            "Graph to Editor sync: {}",
+                            if self.sync_graph_to_editor {
+                                "enabled"
+                            } else {
+                                "disabled"
+                            }
+                        ),
+                    );
                 }
             });
         });
@@ -84,12 +88,12 @@ impl App {
                     if let Some(value) = self.json_editor.parsed_value() {
                         self.json_graph.build_from_json(value);
                         self.graph_initialized = true;
-                        self.log_to_console("Graph updated from JSON");
+                        utils::log("App", "Graph updated from JSON");
                     }
                 } else if changed && !self.json_editor.is_valid() {
                     // Clear graph if JSON becomes invalid
                     self.json_graph.build_from_json(&serde_json::Value::Null);
-                    self.log_to_console("Graph cleared - invalid JSON");
+                    utils::log("App", "Graph cleared - invalid JSON");
                 }
             });
 
@@ -106,19 +110,5 @@ impl App {
 
             self.json_graph.ui(ui);
         });
-    }
-
-    /// Log message to browser console (WASM) or stdout (desktop)
-    fn log_to_console(&self, message: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            use web_sys::console;
-            console::log_1(&format!("[App] {}", message).into());
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            println!("[App] {}", message);
-        }
     }
 }

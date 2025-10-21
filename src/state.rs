@@ -2,7 +2,7 @@
 ///
 /// This module contains the core state management for the canvas editor.
 /// It maintains the application state and handles updates.
-use crate::app::App;
+use crate::ui::App;
 use wgpu;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;

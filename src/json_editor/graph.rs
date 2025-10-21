@@ -1,3 +1,4 @@
+use crate::utils;
 use egui::{Color32, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use serde_json::Value;
 
@@ -305,16 +306,7 @@ impl JsonGraph {
 
     /// Log message to browser console (WASM) or stdout (desktop)
     fn log_to_console(&self, message: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            use web_sys::console;
-            console::log_1(&format!("[JSON Graph] {}", message).into());
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            println!("[JSON Graph] {}", message);
-        }
+        utils::log("JSON Graph", message);
     }
 }
 
