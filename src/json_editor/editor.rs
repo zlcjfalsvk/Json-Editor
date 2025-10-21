@@ -436,7 +436,9 @@ impl JsonEditor {
         let mut redo_requested = false;
         let mut select_all_requested = false;
 
-        ui.input(|i| {
+        // Use ctx.input() to check global keyboard events instead of ui.input()
+        // This ensures shortcuts work even when focus is in nested UI elements
+        ui.ctx().input(|i| {
             // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (macOS)
             if i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift {
                 undo_requested = true;
