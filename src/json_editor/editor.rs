@@ -27,6 +27,8 @@ pub struct JsonEditor {
     target_line: Option<usize>,
     /// Line to highlight (None if no highlight)
     highlight_line: Option<usize>,
+    /// Clicked line number (for editor-to-graph sync)
+    clicked_line: Option<usize>,
 }
 
 impl Default for JsonEditor {
@@ -59,6 +61,7 @@ impl Default for JsonEditor {
             show_line_numbers: true,
             target_line: None,
             highlight_line: None,
+            clicked_line: None,
         }
     }
 }
@@ -84,6 +87,7 @@ impl JsonEditor {
             show_line_numbers: true,
             target_line: None,
             highlight_line: None,
+            clicked_line: None,
         };
         editor.validate();
         editor
@@ -198,6 +202,56 @@ impl JsonEditor {
     /// Set or clear line highlight
     pub fn set_highlight_line(&mut self, line: Option<usize>) {
         self.highlight_line = line;
+    }
+
+    /// Get and clear the clicked line (for one-time event handling)
+    pub fn take_clicked_line(&mut self) -> Option<usize> {
+        self.clicked_line.take()
+    }
+
+    /// Find JSON path for a given line number
+    /// This is a reverse lookup: line number -> JSON path
+    pub fn find_path_for_line(&self, target_line: usize) -> Option<Vec<String>> {
+        if target_line == 0 {
+            return None;
+        }
+
+        let lines: Vec<&str> = self.text.lines().collect();
+        if target_line > lines.len() {
+            return None;
+        }
+
+        // Simple heuristic: look for JSON keys on or near the target line
+        let mut path = Vec::new();
+
+        // Start from beginning and track the path to target_line
+        for line_num in 1..=target_line {
+            if line_num > lines.len() {
+                break;
+            }
+
+            let line = lines[line_num - 1];
+            let trimmed = line.trim();
+
+            // Look for object keys: "key":
+            if let Some(key_start) = trimmed.find('"')
+                && let Some(key_end) = trimmed[key_start + 1..].find('"')
+            {
+                let key = &trimmed[key_start + 1..key_start + 1 + key_end];
+                // Check if this is followed by a colon (indicating it's a key)
+                if trimmed[key_start + 1 + key_end + 1..]
+                    .trim_start()
+                    .starts_with(':')
+                {
+                    // This is a key - add to path if we're building towards target
+                    if line_num <= target_line {
+                        path.push(key.to_string());
+                    }
+                }
+            }
+        }
+
+        if path.is_empty() { None } else { Some(path) }
     }
 
     /// Toggle line numbers
@@ -397,83 +451,126 @@ impl JsonEditor {
         // Editor area with line numbers - use all available height
         let available_height = ui.available_height();
 
+        // Calculate scroll offset if we need to scroll to a target line
+        let scroll_offset = if let Some(target) = self.target_line {
+            let line_height = 17.0;
+            Some((target as f32 - 1.0) * line_height)
+        } else {
+            None
+        };
+
+        // Clear target_line after calculating offset
+        if self.target_line.is_some() {
+            self.target_line = None;
+        }
+
         // Single ScrollArea containing both line numbers and editor
-        egui::ScrollArea::vertical()
+        let mut scroll_area = egui::ScrollArea::vertical()
             .id_salt("json_editor_scroll")
-            .max_height(available_height)
-            .show(ui, |ui| {
-                ui.horizontal_top(|ui| {
-                    // Line numbers column
-                    if self.show_line_numbers {
-                        let line_count = self.text.lines().count();
-                        let line_number_width = 50.0;
+            .max_height(available_height);
 
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(line_number_width, available_height),
-                            egui::Layout::top_down(egui::Align::Min),
-                            |ui| {
-                                ui.style_mut().spacing.item_spacing.y = 0.0;
-                                // Use fixed line height matching monospace font
-                                let line_height = 17.0;
+        // Apply scroll offset if needed
+        if let Some(offset) = scroll_offset {
+            scroll_area = scroll_area.vertical_scroll_offset(offset);
+        }
 
-                                for i in 1..=line_count {
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(line_number_width, line_height),
-                                        egui::Layout::top_down(egui::Align::Max),
-                                        |ui| {
-                                            // Highlight the selected line
-                                            let is_highlighted = self.highlight_line == Some(i);
-                                            let color = if is_highlighted {
-                                                egui::Color32::from_rgb(255, 200, 0) // Yellow highlight
-                                            } else {
-                                                egui::Color32::from_gray(128)
-                                            };
+        scroll_area.show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                // Line numbers column
+                if self.show_line_numbers {
+                    let line_count = self.text.lines().count();
+                    let line_number_width = 50.0;
 
-                                            ui.colored_label(color, format!("{:>4}", i));
-                                        },
-                                    );
-                                }
-                            },
-                        );
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(line_number_width, available_height),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            ui.style_mut().spacing.item_spacing.y = 0.0;
+                            // Use fixed line height matching monospace font
+                            let line_height = 17.0;
 
-                        ui.separator();
-                    }
+                            for i in 1..=line_count {
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(line_number_width, line_height),
+                                    egui::Layout::top_down(egui::Align::Max),
+                                    |ui| {
+                                        // Highlight the selected line
+                                        let is_highlighted = self.highlight_line == Some(i);
+                                        let color = if is_highlighted {
+                                            egui::Color32::from_rgb(255, 200, 0) // Yellow highlight
+                                        } else {
+                                            egui::Color32::from_gray(128)
+                                        };
 
-                    // Text editor - now using full available space
-                    let text_edit = egui::TextEdit::multiline(&mut self.text)
-                        .id(text_edit_id)
-                        .font(egui::TextStyle::Monospace)
-                        .desired_width(f32::INFINITY)
-                        .code_editor()
-                        .char_limit(usize::MAX) // No character limit for JSON spec compliance
-                        .lock_focus(true); // Maintain focus for IME input (Korean, etc.)
+                                        // Make line number clickable
+                                        let line_label =
+                                            ui.selectable_label(false, format!("{:>4}", i));
+                                        line_label.widget_info(|| {
+                                            egui::WidgetInfo::labeled(
+                                                egui::WidgetType::Label,
+                                                true,
+                                                format!("Line {}", i),
+                                            )
+                                        });
 
-                    let response = ui.add(text_edit);
+                                        // Change color after creating the widget
+                                        ui.painter().text(
+                                            line_label.rect.center(),
+                                            egui::Align2::CENTER_CENTER,
+                                            format!("{:>4}", i),
+                                            egui::FontId::proportional(12.0),
+                                            color,
+                                        );
 
-                    if response.changed() {
-                        // Push previous text to undo stack for per-character undo
-                        if self.text != self.previous_text {
-                            self.undo_stack.push(self.previous_text.clone());
-                            if self.undo_stack.len() > self.max_history {
-                                self.undo_stack.remove(0);
+                                        // Detect click
+                                        if line_label.clicked() {
+                                            self.clicked_line = Some(i);
+                                            self.log_to_console(&format!("Line {} clicked", i));
+                                        }
+                                    },
+                                );
                             }
-                            self.redo_stack.clear();
-                            self.previous_text = self.text.clone();
-                        }
+                        },
+                    );
 
-                        let was_valid = self.is_valid();
-                        self.validate();
-                        self.log_to_console("Text changed");
-                        changed = true;
+                    ui.separator();
+                }
 
-                        // If validation failed, maintain focus on the text editor
-                        if !self.is_valid() && was_valid {
-                            ui.memory_mut(|mem| mem.request_focus(text_edit_id));
-                            self.log_to_console("JSON validation failed - focus maintained");
+                // Text editor - now using full available space
+                let text_edit = egui::TextEdit::multiline(&mut self.text)
+                    .id(text_edit_id)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_width(f32::INFINITY)
+                    .code_editor()
+                    .char_limit(usize::MAX) // No character limit for JSON spec compliance
+                    .lock_focus(true); // Maintain focus for IME input (Korean, etc.)
+
+                let response = ui.add(text_edit);
+
+                if response.changed() {
+                    // Push previous text to undo stack for per-character undo
+                    if self.text != self.previous_text {
+                        self.undo_stack.push(self.previous_text.clone());
+                        if self.undo_stack.len() > self.max_history {
+                            self.undo_stack.remove(0);
                         }
+                        self.redo_stack.clear();
+                        self.previous_text = self.text.clone();
                     }
-                });
+
+                    let was_valid = self.is_valid();
+                    self.validate();
+                    self.log_to_console("Text changed");
+                    changed = true;
+
+                    // If validation failed, maintain focus on the text editor
+                    if !self.is_valid() && was_valid {
+                        ui.memory_mut(|mem| mem.request_focus(text_edit_id));
+                        self.log_to_console("JSON validation failed - focus maintained");
+                    }
+                }
             });
+        });
 
         changed
     }

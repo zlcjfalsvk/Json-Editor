@@ -17,6 +17,8 @@ pub struct App {
     graph_initialized: bool,
     /// Enable sync from graph to editor
     sync_graph_to_editor: bool,
+    /// Enable sync from editor to graph
+    sync_editor_to_graph: bool,
 }
 
 impl Default for App {
@@ -27,6 +29,7 @@ impl Default for App {
             left_panel_width: 400.0,
             graph_initialized: false,
             sync_graph_to_editor: true,
+            sync_editor_to_graph: true,
         }
     }
 }
@@ -51,7 +54,7 @@ impl App {
 
                 ui.separator();
 
-                // Sync checkbox
+                // Sync checkboxes
                 if ui
                     .checkbox(&mut self.sync_graph_to_editor, "Sync Graph → Editor")
                     .clicked()
@@ -61,6 +64,23 @@ impl App {
                         &format!(
                             "Graph to Editor sync: {}",
                             if self.sync_graph_to_editor {
+                                "enabled"
+                            } else {
+                                "disabled"
+                            }
+                        ),
+                    );
+                }
+
+                if ui
+                    .checkbox(&mut self.sync_editor_to_graph, "Sync Editor → Graph")
+                    .clicked()
+                {
+                    utils::log(
+                        "App",
+                        &format!(
+                            "Editor to Graph sync: {}",
+                            if self.sync_editor_to_graph {
                                 "enabled"
                             } else {
                                 "disabled"
@@ -81,6 +101,21 @@ impl App {
                 ui.separator();
 
                 let changed = self.json_editor.ui(ui);
+
+                // Check if a line was clicked in the editor (for editor-to-graph sync)
+                if let Some(clicked_line) = self.json_editor.take_clicked_line()
+                    && self.sync_editor_to_graph
+                    && let Some(path) = self.json_editor.find_path_for_line(clicked_line)
+                {
+                    self.json_graph.select_by_path(&path);
+                    utils::log(
+                        "App",
+                        &format!(
+                            "Synced to graph: clicked line {} -> path {:?}",
+                            clicked_line, path
+                        ),
+                    );
+                }
 
                 // Update graph if JSON changed and is valid
                 // OR if graph hasn't been initialized yet but JSON is valid

@@ -214,6 +214,52 @@ impl JsonGraph {
         self.selected_node = None;
     }
 
+    /// Select a node by its JSON path
+    /// Returns true if a matching node was found and selected
+    pub fn select_by_path(&mut self, path: &[String]) -> bool {
+        // Find node with matching path
+        for node in &self.nodes {
+            if node.json_path == path {
+                self.selected_node = Some(node.id);
+                self.log_to_console(&format!(
+                    "Selected node by path: {} (path: {:?})",
+                    node.label, node.json_path
+                ));
+                return true;
+            }
+        }
+
+        // No exact match found - try to find the closest match
+        let mut best_match: Option<&GraphNode> = None;
+        let mut best_match_len = 0;
+
+        for node in &self.nodes {
+            // Count how many path segments match
+            let match_len = node
+                .json_path
+                .iter()
+                .zip(path.iter())
+                .take_while(|(a, b)| a == b)
+                .count();
+
+            if match_len > 0 && match_len > best_match_len {
+                best_match = Some(node);
+                best_match_len = match_len;
+            }
+        }
+
+        if let Some(node) = best_match {
+            self.selected_node = Some(node.id);
+            self.log_to_console(&format!(
+                "Selected closest match: {} (path: {:?}, matched {} segments)",
+                node.label, node.json_path, best_match_len
+            ));
+            true
+        } else {
+            false
+        }
+    }
+
     /// Render the graph using egui
     pub fn ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut selection_changed = false;
