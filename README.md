@@ -1,10 +1,10 @@
-# WGPU Canvas Editor
+# WGPU JSON Editor
 
-A high-performance, cross-platform canvas editor built with Rust and wgpu, inspired by Figma's design interface.
+A high-performance, cross-platform JSON editor built with Rust, wgpu, and egui. This application provides a professional IDE-like JSON editing experience that runs on both desktop and web platforms using the same codebase.
 
 ## Overview
 
-This project demonstrates a modern approach to building graphics-intensive applications that run on both desktop and web platforms using the same codebase. It leverages Rust's performance and safety guarantees along with wgpu's portable graphics API.
+This project demonstrates a modern approach to building graphics-intensive applications with rich UI that work seamlessly across desktop and web. It leverages Rust's performance and safety guarantees along with wgpu's portable graphics API and egui's immediate-mode GUI framework to deliver a VSCode-like JSON editing experience.
 
 ## Screenshots
 
@@ -15,17 +15,34 @@ This project demonstrates a modern approach to building graphics-intensive appli
 
 ## Features
 
-- Cross-platform rendering (Desktop & Web via WASM)
-- Hardware-accelerated graphics using wgpu
-- Modern Rust 2024 edition
-- Basic shape rendering and canvas management
-- Responsive event handling
+### JSON Editor (Left Panel)
+- **Real-time syntax validation** with error messages
+- **Pretty print and compact formatting**
+- **Undo/Redo functionality** - Per-character undo/redo with history stack (max 100 items)
+- **Line numbers** with toggle option
+- **Synchronized scrolling** between line numbers and editor
+- **Focus retention** when JSON syntax errors occur
+- **Monospace code editor** with full-height panel
+- **Clipboard support** - Native copy/paste operations with undo/redo
+
+### JSON Graph Visualizer (Right Panel)
+- **Visual graph representation** of JSON structure
+- **Interactive node visualization** with color-coded types
+- **Sync Graph → Editor** checkbox for future integration
+
+### Cross-Platform Support
+- **Desktop**: Native performance with wgpu on Vulkan/Metal/DX12
+- **Web**: Near-native performance via WebAssembly and WebGPU
+- **Responsive UI** that adapts to window resizing
+- **Fullscreen editor mode** on web (VSCode-like experience)
 
 ## Technology Stack
 
 - **Rust 2024**: Latest edition with improved ergonomics and features
 - **wgpu**: Safe, portable graphics API (Vulkan, Metal, DX12, WebGPU)
+- **egui**: Immediate-mode GUI framework for rich UI
 - **winit**: Cross-platform window management
+- **serde/serde_json**: JSON parsing and serialization
 - **wasm-bindgen**: Rust-WASM interop for web deployment
 - **webpack**: Web bundling and development server
 
@@ -36,11 +53,16 @@ wgpu-example/
 ├── src/
 │   ├── lib.rs              # Common library and WASM exports
 │   ├── main.rs             # Desktop application entry point
-│   ├── renderer/
-│   │   ├── mod.rs          # Renderer module
-│   │   └── canvas.rs       # Canvas rendering implementation
+│   ├── app.rs              # Application UI logic
 │   ├── state.rs            # Application state management
-│   └── input.rs            # Input event handling
+│   ├── input.rs            # Input event handling
+│   ├── json_editor/        # JSON editor module
+│   │   ├── mod.rs          # Module exports
+│   │   ├── editor.rs       # JSON editing functionality
+│   │   └── graph.rs        # Graph visualization
+│   └── renderer/
+│       ├── mod.rs          # Renderer module
+│       └── canvas.rs       # Canvas rendering implementation
 ├── web/
 │   ├── index.html          # Web application HTML
 │   ├── index.js            # JavaScript entry point
@@ -48,6 +70,8 @@ wgpu-example/
 │   └── webpack.config.js   # Webpack configuration
 ├── tests/
 │   └── integration_test.rs # Integration tests
+├── .claude/
+│   └── claude.md           # Project context for AI assistants
 ├── .github/
 │   └── workflows/
 │       └── ci.yml          # CI/CD pipeline
@@ -59,7 +83,7 @@ wgpu-example/
 ## Prerequisites
 
 ### For Desktop Build
-- Rust 1.75+ with Rust 2024 edition support
+- Rust 1.85+ with Rust 2024 edition support
 - Cargo
 
 ### For Web Build
@@ -82,11 +106,15 @@ The fastest way to get started:
 cargo run --release
 ```
 
-The application will open a window with an 800x600 canvas displaying a colorful triangle (red, green, blue vertices).
+The application will open a window with the JSON editor in the left panel and graph visualizer in the right panel.
 
 **Controls:**
+- Type JSON in the left panel editor
+- Use **Ctrl+Z** / **Ctrl+Shift+Z** (or **Cmd+Z** / **Cmd+Shift+Z** on macOS) for undo/redo
+- Click **Pretty** or **Compact** buttons to format JSON
+- Toggle **Line Numbers** checkbox to show/hide line numbers
 - Press `ESC` to close the application
-- Window is resizable
+- Window is resizable with responsive panels
 
 ### Web Application (WASM)
 
@@ -99,18 +127,15 @@ rustup target add wasm32-unknown-unknown
 # Step 2: Install wasm-pack (first time only)
 cargo install wasm-pack
 
-# Step 3: Build the WASM module
-wasm-pack build --target web --release
-
-# Step 4: Install web dependencies
+# Step 3: Install web dependencies
 cd web
 npm install
 
-# Step 5: Start the development server
-npm run serve
+# Step 4: Build and start development server
+npm run dev
 ```
 
-The browser will automatically open to `http://localhost:8080` showing the canvas editor.
+The browser will automatically open to `http://localhost:8080` showing the fullscreen JSON editor.
 
 **Note:** Ensure your browser supports WebGPU (Chrome 113+, Firefox 121+, Safari 18+).
 
@@ -151,45 +176,48 @@ cargo install wasm-pack
 cd web && npm install && cd ..
 ```
 
-2. **Build the WASM module**:
-```bash
-# Development build
-wasm-pack build --target web --dev
-
-# Release build (optimized)
-wasm-pack build --target web --release
-```
-
-This creates a `pkg/` directory with:
-- `wgpu_canvas_editor_bg.wasm` - The WebAssembly binary
-- `wgpu_canvas_editor.js` - JavaScript bindings
-- `wgpu_canvas_editor.d.ts` - TypeScript definitions
-
-3. **Run the development server**:
+2. **Available npm scripts**:
 ```bash
 cd web
+
+# Development mode (builds WASM in dev mode and starts server)
+npm run dev
+
+# Start dev server only (assumes WASM is already built)
+npm start
+
+# Build WASM module only (development)
+npm run wasm:dev
+
+# Build WASM module only (release)
+npm run wasm:build
+
+# Production build
+npm run build
+
+# Serve pre-built files
 npm run serve
 ```
 
-4. **Build for production**:
+3. **Manual WASM build** (if needed):
 ```bash
-cd web
-npm run build
+# Development build
+wasm-pack build --target web --dev --out-dir web/pkg
+
+# Release build (optimized)
+wasm-pack build --target web --release --out-dir web/pkg
 ```
 
-The production build will be in `web/dist/` and can be deployed to any static hosting service.
-
-5. **Clean build artifacts**:
-```bash
-cd web
-npm run clean
-```
+This creates a `web/pkg/` directory with:
+- `wgpu_canvas_editor_bg.wasm` - The WebAssembly binary
+- `wgpu_canvas_editor.js` - JavaScript bindings
+- `wgpu_canvas_editor.d.ts` - TypeScript definitions
 
 ### Running Tests
 
 Execute the test suite:
 ```bash
-cargo test
+cargo test --all
 ```
 
 Run tests with output:
@@ -197,16 +225,37 @@ Run tests with output:
 cargo test -- --nocapture
 ```
 
+### Pre-Commit Verification
+
+Before committing code, run these checks (as specified in `.claude/claude.md`):
+
+```bash
+# 1. Format check
+cargo fmt --all -- --check
+
+# 2. Linting
+cargo clippy --all-targets --all-features -- -D warnings
+
+# 3. Tests
+cargo test --all
+
+# 4. Desktop build
+cargo build --release
+
+# 5. WASM build (if web-related changes)
+wasm-pack build --target web --out-dir web/pkg
+```
+
 ## Development
 
 ### Code Formatting
 ```bash
-cargo fmt
+cargo fmt --all
 ```
 
 ### Linting
 ```bash
-cargo clippy
+cargo clippy --all-targets --all-features
 ```
 
 ### Watch Mode (Desktop)
@@ -216,63 +265,96 @@ cargo watch -x run
 
 ## Architecture
 
+### Application Layer (`src/app.rs`)
+The main application UI logic using egui:
+- Top panel with controls and sync options
+- Left panel (JSON editor)
+- Central panel (graph visualizer)
+- Layout management and resizing
+
+### JSON Editor Module (`src/json_editor/`)
+
+**Editor** (`editor.rs`):
+- Real-time JSON validation with serde_json
+- Undo/redo with bounded history stack
+- Line number display with synchronized scrolling
+- Focus management for improved UX
+- Pretty print and compact formatting
+
+**Graph** (`graph.rs`):
+- Visual representation of JSON structure
+- Node-based visualization with type colors
+- Interactive graph rendering
+
+### State Management (`src/state.rs`)
+Maintains application state including:
+- egui context management
+- Renderer integration
+- Event handling coordination
+
 ### Renderer (`src/renderer/`)
 The renderer module handles all wgpu-related operations:
 - Graphics device initialization
 - Render pipeline setup
-- Shader management
-- Draw call execution
-
-### State Management (`src/state.rs`)
-Maintains application state including:
-- Canvas objects and their properties
-- User selections
-- Viewport transformations
+- Surface configuration
+- Integration with egui renderer
 
 ### Input Handling (`src/input.rs`)
 Processes user input events:
 - Mouse movements and clicks
 - Keyboard shortcuts
-- Touch events (web only)
+- Window events
 
 ### Platform Abstraction
 - **Desktop**: Uses `winit` for window management and event loop
 - **Web**: Uses `wasm-bindgen` and `web-sys` for browser integration
 
-## Development Roadmap
+## Features Roadmap
 
-### Phase 1: Foundation ✓
-- [x] Project setup and structure
-- [x] Basic wgpu renderer
-- [x] Desktop window management
-- [x] WASM web support
-- [x] Simple triangle rendering
+### Phase 1: Foundation ✅
+- [x] Basic wgpu renderer setup
+- [x] Cross-platform window management (desktop + web)
+- [x] egui integration for UI
+- [x] JSON editor with syntax validation
+- [x] JSON graph visualizer
+- [x] Undo/redo functionality (per-character)
+- [x] Line numbers with synchronized scrolling
+- [x] Focus management in UI
+- [x] WASM build support
+- [x] Fullscreen web interface
 
-### Phase 2: Core Features (In Progress)
-- [ ] Shape primitives (rectangles, circles, lines)
-- [ ] Shape selection and manipulation
-- [ ] Pan and zoom controls
-- [ ] Basic keyboard shortcuts
+### Phase 2: Enhanced JSON Editing (In Progress)
+- [ ] Syntax highlighting with VSCode theme
+- [ ] Click on graph node to jump to line in editor
+- [ ] Search and replace functionality
+- [ ] Bracket matching and auto-completion
+- [ ] JSON schema validation
+- [ ] Multiple file tabs
 
-### Phase 3: Advanced Editing
-- [ ] Layer management system
-- [ ] Undo/redo functionality
-- [ ] Copy/paste operations
-- [ ] Transform tools (rotate, scale)
+### Phase 3: Advanced Features
+- [ ] JSON path navigation
+- [ ] Tree view for JSON structure
+- [ ] Diff view for comparing JSON files
+- [ ] Import/Export various formats (YAML, TOML, XML)
+- [ ] Custom themes and color schemes
+- [ ] Keyboard shortcut customization
 
-### Phase 4: Polish & Export
-- [ ] Export to PNG/SVG formats
-- [ ] Performance optimization
+### Phase 4: Collaboration & Export
+- [ ] Export to PNG/SVG (graph visualization)
+- [ ] Performance optimization for large JSON files
 - [ ] Mobile touch support
-- [ ] Collaborative editing
+- [ ] Real-time collaborative editing
+- [ ] Cloud storage integration
 
 ## Performance
 
 The application is designed for high performance:
 - GPU-accelerated rendering via wgpu
-- Efficient state management with minimal redraws
-- Instanced rendering for multiple objects
-- Optimized WASM binary size
+- Efficient state management with egui's immediate-mode paradigm
+- Optimized text rendering with monospace fonts
+- Bounded undo/redo history (max 100 items) for memory efficiency
+- Lazy validation and parsing
+- Small WASM binary size with optimized builds
 
 ## Browser Support (WASM)
 
@@ -289,7 +371,7 @@ Contributions are welcome! Please follow these guidelines:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes with tests
-4. Run `cargo fmt` and `cargo clippy`
+4. Run pre-commit verification checks (see above)
 5. Test both desktop and web builds
 6. Submit a pull request
 
@@ -301,8 +383,8 @@ Contributions are welcome! Please follow these guidelines:
 - Ensure graphics drivers are up to date
 - Check GPU compatibility with Vulkan/Metal/DX12
 
-**Black screen:**
-- Verify shader compilation succeeded
+**UI rendering issues:**
+- Verify egui is properly initialized
 - Check console for error messages
 
 ### Web Issues
@@ -312,10 +394,25 @@ Contributions are welcome! Please follow these guidelines:
 - Check browser console for errors
 - Verify WebGPU is enabled in your browser
 
-**Performance issues:**
+**Editor not responding:**
 - Try Chrome/Edge for best WebGPU performance
 - Check browser task manager for GPU usage
-- Consider reducing canvas size
+- Clear browser cache and reload
+
+**Text input issues:**
+- Ensure focus is on the text editor
+- Check browser console for JavaScript errors
+
+### JSON Editor Issues
+
+**Undo/Redo not working:**
+- Undo/redo works per-character and clipboard operation
+- Maximum 100 undo steps are preserved
+- Check browser console for any errors
+
+**Line numbers not syncing:**
+- Line numbers scroll synchronously with editor
+- Try toggling line numbers off and on
 
 ## License
 
@@ -324,8 +421,17 @@ MIT License - See LICENSE file for details
 ## Acknowledgments
 
 - [wgpu](https://wgpu.rs/) - Portable graphics library
+- [egui](https://www.egui.rs/) - Immediate-mode GUI framework
 - [winit](https://github.com/rust-windowing/winit) - Window management
+- [serde](https://serde.rs/) - Serialization framework
 - [Learn wgpu Tutorial](https://sotrh.github.io/learn-wgpu/) - Excellent learning resource
+
+## Resources
+
+- [wgpu Documentation](https://docs.rs/wgpu/)
+- [egui Documentation](https://docs.rs/egui/)
+- [Rust WebAssembly Book](https://rustwasm.github.io/docs/book/)
+- [winit Documentation](https://docs.rs/winit/)
 
 ## Contact
 
@@ -333,4 +439,4 @@ For questions or feedback, please open an issue on GitHub.
 
 ---
 
-Built with ❤️ using Rust 🦀
+Built with ❤️ using Rust 🦀 and WebGPU 🎨
