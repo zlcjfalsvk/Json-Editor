@@ -3,7 +3,6 @@
 /// This module contains the common library code and WASM exports for the web version.
 pub mod json_editor;
 pub mod platform;
-pub mod renderer;
 pub mod state;
 pub mod ui;
 pub mod utils;
