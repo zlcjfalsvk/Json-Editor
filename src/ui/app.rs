@@ -101,6 +101,31 @@ impl App {
 
             let selection_changed = self.json_graph.ui(ui);
 
+            // Check if there's a pending edit from the graph
+            if let Some(edit_result) = self.json_graph.take_pending_edit() {
+                utils::log(
+                    "App",
+                    &format!(
+                        "Processing graph edit: {:?} = {}",
+                        edit_result.json_path, edit_result.new_value
+                    ),
+                );
+
+                // Update the JSON editor with the new value
+                if self
+                    .json_editor
+                    .update_value_at_path(&edit_result.json_path, &edit_result.new_value)
+                {
+                    // Rebuild graph from updated JSON
+                    if let Some(value) = self.json_editor.parsed_value() {
+                        self.json_graph.build_from_json(value);
+                        utils::log("App", "Graph rebuilt after edit");
+                    }
+                } else {
+                    utils::log("App", "Failed to update JSON from graph edit");
+                }
+            }
+
             // Sync graph selection to editor
             if selection_changed
                 && let Some(path) = self.json_graph.get_selected_path()

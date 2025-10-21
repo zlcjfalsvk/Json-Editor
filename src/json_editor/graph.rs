@@ -102,6 +102,15 @@ pub struct EditingCell {
     pub value_type: NodeType,
 }
 
+/// Result of a completed edit operation
+#[derive(Debug, Clone)]
+pub struct EditResult {
+    /// JSON path to the edited value
+    pub json_path: Vec<String>,
+    /// The new value (as JSON-formatted string)
+    pub new_value: String,
+}
+
 /// JSON Graph visualization
 pub struct JsonGraph {
     nodes: Vec<GraphNode>,
@@ -117,6 +126,8 @@ pub struct JsonGraph {
     selected_node: Option<usize>,
     /// Currently editing cell (if any)
     editing_cell: Option<EditingCell>,
+    /// Pending edit result to be processed by App
+    pending_edit: Option<EditResult>,
 }
 
 impl Default for JsonGraph {
@@ -130,6 +141,7 @@ impl Default for JsonGraph {
             dragging: false,
             selected_node: None,
             editing_cell: None,
+            pending_edit: None,
         }
     }
 }
@@ -146,6 +158,7 @@ impl JsonGraph {
         self.next_id = 0;
         self.selected_node = None;
         self.editing_cell = None; // Cancel any ongoing edits
+        self.pending_edit = None; // Clear any pending edits
 
         if value.is_null() {
             return;
@@ -378,6 +391,12 @@ impl JsonGraph {
         self.selected_node
             .and_then(|id| self.nodes.iter().find(|n| n.id == id))
             .map(|node| node.json_path.clone())
+    }
+
+    /// Take and return the pending edit result (if any)
+    /// This clears the pending edit after returning it
+    pub fn take_pending_edit(&mut self) -> Option<EditResult> {
+        self.pending_edit.take()
     }
 
     /// Clear selection
@@ -895,6 +914,16 @@ impl JsonGraph {
                 // Then update
                 if let Some(node) = self.nodes.iter_mut().find(|n| n.id == node_id) {
                     if Self::update_cell_value(node, &key, &validated_value) {
+                        // Build complete JSON path for this edit
+                        let mut json_path = node.json_path.clone();
+                        json_path.push(key.clone());
+
+                        // Store edit result for App to process
+                        self.pending_edit = Some(EditResult {
+                            json_path,
+                            new_value: validated_value.clone(),
+                        });
+
                         self.log_to_console(&format!("Saved edit: {} = {}", key, text));
                         close_window = true;
                         selection_changed = true; // Trigger synchronization
