@@ -97,10 +97,7 @@ impl<'a> State<'a> {
         let size = window.inner_size();
 
         // Ensure minimum size to prevent 0-sized surface
-        let size = PhysicalSize::new(
-            size.width.max(1),
-            size.height.max(1),
-        );
+        let size = PhysicalSize::new(size.width.max(1), size.height.max(1));
 
         log::info!("Creating State with size: {}x{}", size.width, size.height);
 
@@ -255,7 +252,11 @@ impl<'a> State<'a> {
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // Skip rendering if surface has zero size
         if self.config.width == 0 || self.config.height == 0 {
-            log::warn!("Skipping render: surface size is 0 ({}x{})", self.config.width, self.config.height);
+            log::warn!(
+                "Skipping render: surface size is 0 ({}x{})",
+                self.config.width,
+                self.config.height
+            );
             return Ok(());
         }
 

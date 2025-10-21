@@ -183,7 +183,10 @@ impl ApplicationHandler for WasmApp {
 
         // Skip if not initialized yet
         if app_state.state.is_none() {
-            log::debug!("window_event received but state not initialized yet: {:?}", event);
+            log::debug!(
+                "window_event received but state not initialized yet: {:?}",
+                event
+            );
             return;
         }
 
