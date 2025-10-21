@@ -122,7 +122,8 @@ impl App {
                             "App",
                             &format!("Processing graph delete: {:?}", edit_result.json_path),
                         );
-                        self.json_editor.delete_value_at_path(&edit_result.json_path)
+                        self.json_editor
+                            .delete_value_at_path(&edit_result.json_path)
                     }
                     ModifyOperation::Add { ref key, ref value } => {
                         utils::log(
@@ -135,7 +136,10 @@ impl App {
                         self.json_editor
                             .add_value_at_path(&edit_result.json_path, key, value)
                     }
-                    ModifyOperation::Rename { ref old_key, ref new_key } => {
+                    ModifyOperation::Rename {
+                        ref old_key,
+                        ref new_key,
+                    } => {
                         utils::log(
                             "App",
                             &format!(
@@ -143,8 +147,11 @@ impl App {
                                 edit_result.json_path, old_key, new_key
                             ),
                         );
-                        self.json_editor
-                            .rename_key_at_path(&edit_result.json_path, old_key, new_key)
+                        self.json_editor.rename_key_at_path(
+                            &edit_result.json_path,
+                            old_key,
+                            new_key,
+                        )
                     }
                 };
 

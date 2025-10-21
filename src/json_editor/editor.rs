@@ -353,7 +353,7 @@ impl JsonEditor {
                 // Parse the new value based on its format
                 let new_value = if new_value_str.starts_with('"') && new_value_str.ends_with('"') {
                     // It's a string (with quotes)
-                    serde_json::Value::String(new_value_str[1..new_value_str.len()-1].to_string())
+                    serde_json::Value::String(new_value_str[1..new_value_str.len() - 1].to_string())
                 } else if let Ok(num) = new_value_str.parse::<f64>() {
                     // It's a number
                     serde_json::json!(num)
@@ -391,9 +391,7 @@ impl JsonEditor {
 
         for segment in path {
             current = match current {
-                Value::Object(map) => {
-                    map.get_mut(segment)?
-                }
+                Value::Object(map) => map.get_mut(segment)?,
                 Value::Array(arr) => {
                     let index: usize = segment.parse().ok()?;
                     arr.get_mut(index)?
@@ -444,7 +442,10 @@ impl JsonEditor {
                                 self.previous_text = pretty;
                                 self.parsed_value = Some(value);
                                 self.error_message = None;
-                                self.log_to_console(&format!("Deleted array item at index: {}", index));
+                                self.log_to_console(&format!(
+                                    "Deleted array item at index: {}",
+                                    index
+                                ));
                                 return true;
                             }
                         }
@@ -467,7 +468,7 @@ impl JsonEditor {
             // Parse the new value based on its format
             let new_value = if value_str.starts_with('"') && value_str.ends_with('"') {
                 // It's a string (with quotes)
-                serde_json::Value::String(value_str[1..value_str.len()-1].to_string())
+                serde_json::Value::String(value_str[1..value_str.len() - 1].to_string())
             } else if let Ok(num) = value_str.parse::<f64>() {
                 // It's a number
                 serde_json::json!(num)
@@ -558,7 +559,10 @@ impl JsonEditor {
                             self.previous_text = pretty;
                             self.parsed_value = Some(value);
                             self.error_message = None;
-                            self.log_to_console(&format!("Renamed property: {} -> {}", old_key, new_key));
+                            self.log_to_console(&format!(
+                                "Renamed property: {} -> {}",
+                                old_key, new_key
+                            ));
                             return true;
                         }
                     }

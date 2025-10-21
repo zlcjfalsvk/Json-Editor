@@ -331,19 +331,33 @@ impl JsonGraph {
                 } else {
                     format!("\"{}\"", s)
                 };
-                (display.clone(), NodeType::String, NodeContent::Primitive(display))
+                (
+                    display.clone(),
+                    NodeType::String,
+                    NodeContent::Primitive(display),
+                )
             }
             Value::Number(n) => {
                 let display = n.to_string();
-                (display.clone(), NodeType::Number, NodeContent::Primitive(display))
+                (
+                    display.clone(),
+                    NodeType::Number,
+                    NodeContent::Primitive(display),
+                )
             }
             Value::Bool(b) => {
                 let display = b.to_string();
-                (display.clone(), NodeType::Boolean, NodeContent::Primitive(display))
+                (
+                    display.clone(),
+                    NodeType::Boolean,
+                    NodeContent::Primitive(display),
+                )
             }
-            Value::Null => {
-                ("null".to_string(), NodeType::Null, NodeContent::Primitive("null".to_string()))
-            }
+            Value::Null => (
+                "null".to_string(),
+                NodeType::Null,
+                NodeContent::Primitive("null".to_string()),
+            ),
         };
 
         // Calculate position based on depth and offset
@@ -575,7 +589,10 @@ impl JsonGraph {
                     // Draw horizontal separator
                     if i > 0 {
                         painter.line_segment(
-                            [Pos2::new(rect.min.x + 5.0, y), Pos2::new(rect.max.x - 5.0, y)],
+                            [
+                                Pos2::new(rect.min.x + 5.0, y),
+                                Pos2::new(rect.max.x - 5.0, y),
+                            ],
                             Stroke::new(0.5 * zoom, Color32::from_gray(180)),
                         );
                     }
@@ -609,7 +626,10 @@ impl JsonGraph {
                     // Draw value (right column) with type-specific color
                     let value_rect = Rect::from_min_size(
                         Pos2::new(rect.min.x + key_column_width + 5.0, y),
-                        Vec2::new(rect.width() - key_column_width - delete_button_size - 20.0, row_height),
+                        Vec2::new(
+                            rect.width() - key_column_width - delete_button_size - 20.0,
+                            row_height,
+                        ),
                     );
                     let value_color = if pair.is_reference {
                         Color32::from_rgb(150, 200, 255) // Light blue for references
@@ -625,10 +645,17 @@ impl JsonGraph {
                     );
 
                     // Draw delete button (X icon)
-                    let delete_center = Pos2::new(delete_button_x + delete_button_size / 2.0, y + row_height / 2.0);
+                    let delete_center = Pos2::new(
+                        delete_button_x + delete_button_size / 2.0,
+                        y + row_height / 2.0,
+                    );
 
                     // Draw button background (light gray circle)
-                    painter.circle_filled(delete_center, delete_button_size / 2.0, Color32::from_rgb(80, 80, 80));
+                    painter.circle_filled(
+                        delete_center,
+                        delete_button_size / 2.0,
+                        Color32::from_rgb(80, 80, 80),
+                    );
 
                     // Draw X
                     let x_size = delete_button_size * 0.4;
@@ -694,7 +721,10 @@ impl JsonGraph {
                     // Draw horizontal separator
                     if i > 0 {
                         painter.line_segment(
-                            [Pos2::new(rect.min.x + 5.0, y), Pos2::new(rect.max.x - 5.0, y)],
+                            [
+                                Pos2::new(rect.min.x + 5.0, y),
+                                Pos2::new(rect.max.x - 5.0, y),
+                            ],
                             Stroke::new(0.5 * zoom, Color32::from_gray(180)),
                         );
                     }
@@ -728,7 +758,10 @@ impl JsonGraph {
                     // Draw value (right column) with type-specific color
                     let value_rect = Rect::from_min_size(
                         Pos2::new(rect.min.x + index_column_width + 5.0, y),
-                        Vec2::new(rect.width() - index_column_width - delete_button_size - 20.0, row_height),
+                        Vec2::new(
+                            rect.width() - index_column_width - delete_button_size - 20.0,
+                            row_height,
+                        ),
                     );
                     let value_color = if item.is_reference {
                         Color32::from_rgb(150, 200, 255) // Light blue for references
@@ -744,10 +777,17 @@ impl JsonGraph {
                     );
 
                     // Draw delete button (X icon)
-                    let delete_center = Pos2::new(delete_button_x + delete_button_size / 2.0, y + row_height / 2.0);
+                    let delete_center = Pos2::new(
+                        delete_button_x + delete_button_size / 2.0,
+                        y + row_height / 2.0,
+                    );
 
                     // Draw button background (light gray circle)
-                    painter.circle_filled(delete_center, delete_button_size / 2.0, Color32::from_rgb(80, 80, 80));
+                    painter.circle_filled(
+                        delete_center,
+                        delete_button_size / 2.0,
+                        Color32::from_rgb(80, 80, 80),
+                    );
 
                     // Draw X
                     let x_size = delete_button_size * 0.4;
@@ -1065,7 +1105,11 @@ impl JsonGraph {
                             ui.label(egui::RichText::new("💡 Enter a number").small().italics());
                         }
                         NodeType::Boolean => {
-                            ui.label(egui::RichText::new("💡 Enter true or false").small().italics());
+                            ui.label(
+                                egui::RichText::new("💡 Enter true or false")
+                                    .small()
+                                    .italics(),
+                            );
                         }
                         _ => {}
                     }
@@ -1143,16 +1187,37 @@ impl JsonGraph {
 
                     ui.label("Value Type:");
                     ui.horizontal(|ui| {
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::String), "String").clicked() {
+                        if ui
+                            .selectable_label(
+                                matches!(adding.value_type, NodeType::String),
+                                "String",
+                            )
+                            .clicked()
+                        {
                             adding.value_type = NodeType::String;
                         }
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::Number), "Number").clicked() {
+                        if ui
+                            .selectable_label(
+                                matches!(adding.value_type, NodeType::Number),
+                                "Number",
+                            )
+                            .clicked()
+                        {
                             adding.value_type = NodeType::Number;
                         }
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::Boolean), "Boolean").clicked() {
+                        if ui
+                            .selectable_label(
+                                matches!(adding.value_type, NodeType::Boolean),
+                                "Boolean",
+                            )
+                            .clicked()
+                        {
                             adding.value_type = NodeType::Boolean;
                         }
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::Null), "Null").clicked() {
+                        if ui
+                            .selectable_label(matches!(adding.value_type, NodeType::Null), "Null")
+                            .clicked()
+                        {
                             adding.value_type = NodeType::Null;
                         }
                     });
@@ -1181,16 +1246,37 @@ impl JsonGraph {
                     // Array: only need value (index is automatic)
                     ui.label("Value Type:");
                     ui.horizontal(|ui| {
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::String), "String").clicked() {
+                        if ui
+                            .selectable_label(
+                                matches!(adding.value_type, NodeType::String),
+                                "String",
+                            )
+                            .clicked()
+                        {
                             adding.value_type = NodeType::String;
                         }
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::Number), "Number").clicked() {
+                        if ui
+                            .selectable_label(
+                                matches!(adding.value_type, NodeType::Number),
+                                "Number",
+                            )
+                            .clicked()
+                        {
                             adding.value_type = NodeType::Number;
                         }
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::Boolean), "Boolean").clicked() {
+                        if ui
+                            .selectable_label(
+                                matches!(adding.value_type, NodeType::Boolean),
+                                "Boolean",
+                            )
+                            .clicked()
+                        {
                             adding.value_type = NodeType::Boolean;
                         }
-                        if ui.selectable_label(matches!(adding.value_type, NodeType::Null), "Null").clicked() {
+                        if ui
+                            .selectable_label(matches!(adding.value_type, NodeType::Null), "Null")
+                            .clicked()
+                        {
                             adding.value_type = NodeType::Null;
                         }
                     });
@@ -1234,7 +1320,11 @@ impl JsonGraph {
                         ui.label(egui::RichText::new("💡 Enter a number").small().italics());
                     }
                     NodeType::Boolean => {
-                        ui.label(egui::RichText::new("💡 Enter true or false").small().italics());
+                        ui.label(
+                            egui::RichText::new("💡 Enter true or false")
+                                .small()
+                                .italics(),
+                        );
                     }
                     NodeType::Null => {
                         ui.label(egui::RichText::new("💡 Enter null").small().italics());
@@ -1269,7 +1359,11 @@ impl JsonGraph {
                     self.pending_edit = Some(EditResult {
                         json_path,
                         operation: ModifyOperation::Add {
-                            key: if is_object { key.clone() } else { String::new() },
+                            key: if is_object {
+                                key.clone()
+                            } else {
+                                String::new()
+                            },
                             value: validated_value,
                         },
                     });
@@ -1366,7 +1460,10 @@ impl JsonGraph {
                     // Create the rename operation
                     self.pending_edit = Some(EditResult {
                         json_path,
-                        operation: ModifyOperation::Rename { old_key, new_key: new_key.clone() },
+                        operation: ModifyOperation::Rename {
+                            old_key,
+                            new_key: new_key.clone(),
+                        },
                     });
 
                     self.log_to_console(&format!("Renamed property to: {}", new_key));
@@ -1396,75 +1493,74 @@ impl JsonGraph {
                 .fixed_pos(menu_position) // Use the saved position
                 .order(egui::Order::Foreground)
                 .show(ui.ctx(), |ui| {
-                    egui::Frame::popup(ui.style())
-                        .show(ui, |ui| {
-                            ui.set_min_width(150.0);
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.set_min_width(150.0);
 
-                    if let Some(key) = &row_key {
-                        // Row-level context menu
-                        if is_primitive
-                            && ui.button("✏ Edit Value").clicked()
-                        {
-                            // Trigger edit action
-                            if let Some(node) = self.nodes.iter().find(|n| n.id == node_id)
-                                && let Some(current_value) = self.get_cell_value(node, key)
-                            {
-                                self.editing_cell = Some(EditingCell {
+                        if let Some(key) = &row_key {
+                            // Row-level context menu
+                            if is_primitive && ui.button("✏ Edit Value").clicked() {
+                                // Trigger edit action
+                                if let Some(node) = self.nodes.iter().find(|n| n.id == node_id)
+                                    && let Some(current_value) = self.get_cell_value(node, key)
+                                {
+                                    self.editing_cell = Some(EditingCell {
+                                        node_id,
+                                        key: key.clone(),
+                                        text: current_value,
+                                        value_type: value_type.clone().unwrap(),
+                                    });
+                                }
+                                close_context_menu = true;
+                            }
+
+                            if is_object && ui.button("✎ Rename Key").clicked() {
+                                // Trigger rename action
+                                self.renaming_key = Some(RenamingKey {
                                     node_id,
-                                    key: key.clone(),
-                                    text: current_value,
-                                    value_type: value_type.clone().unwrap(),
+                                    old_key: key.clone(),
+                                    new_key: key.clone(),
                                 });
+                                close_context_menu = true;
                             }
-                            close_context_menu = true;
-                        }
 
-                        if is_object
-                            && ui.button("✎ Rename Key").clicked()
-                        {
-                            // Trigger rename action
-                            self.renaming_key = Some(RenamingKey {
-                                node_id,
-                                old_key: key.clone(),
-                                new_key: key.clone(),
-                            });
-                            close_context_menu = true;
-                        }
+                            if ui.button("🗑 Delete").clicked() {
+                                // Trigger delete action
+                                if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
+                                    let mut json_path = node.json_path.clone();
+                                    json_path.push(key.clone());
 
-                        if ui.button("🗑 Delete").clicked() {
-                            // Trigger delete action
-                            if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
-                                let mut json_path = node.json_path.clone();
-                                json_path.push(key.clone());
-
-                                self.pending_edit = Some(EditResult {
-                                    json_path,
-                                    operation: ModifyOperation::Delete,
+                                    self.pending_edit = Some(EditResult {
+                                        json_path,
+                                        operation: ModifyOperation::Delete,
+                                    });
+                                    selection_changed = true;
+                                }
+                                close_context_menu = true;
+                            }
+                        } else {
+                            // Container-level context menu (add button area)
+                            let label = if is_object {
+                                "➕ Add Property"
+                            } else {
+                                "➕ Add Item"
+                            };
+                            if ui.button(label).clicked() {
+                                self.adding_state = Some(AddingState {
+                                    node_id,
+                                    is_object,
+                                    key: String::new(),
+                                    value: String::new(),
+                                    value_type: NodeType::String,
                                 });
-                                selection_changed = true;
+                                close_context_menu = true;
                             }
-                            close_context_menu = true;
                         }
-                    } else {
-                        // Container-level context menu (add button area)
-                        let label = if is_object { "➕ Add Property" } else { "➕ Add Item" };
-                        if ui.button(label).clicked() {
-                            self.adding_state = Some(AddingState {
-                                node_id,
-                                is_object,
-                                key: String::new(),
-                                value: String::new(),
-                                value_type: NodeType::String,
-                            });
-                            close_context_menu = true;
-                        }
-                    }
 
-                    ui.separator();
-                    if ui.button("✖ Cancel").clicked() {
-                        close_context_menu = true;
-                    }
-                        }); // Close Frame::popup
+                        ui.separator();
+                        if ui.button("✖ Cancel").clicked() {
+                            close_context_menu = true;
+                        }
+                    }); // Close Frame::popup
                 }); // Close Area
         }
 
@@ -1488,7 +1584,12 @@ impl JsonGraph {
 
     /// Check if a click position is on an action area (edit, delete, add button)
     /// Returns None if clicking on header or empty space
-    fn get_click_action(&self, node: &GraphNode, rect: Rect, click_pos: Pos2) -> Option<ClickAction> {
+    fn get_click_action(
+        &self,
+        node: &GraphNode,
+        rect: Rect,
+        click_pos: Pos2,
+    ) -> Option<ClickAction> {
         let header_height = 25.0 * self.zoom;
         let row_height = 22.0 * self.zoom;
         let delete_button_size = 16.0 * self.zoom;
@@ -1531,7 +1632,8 @@ impl JsonGraph {
                     }
 
                     // Check if clicking on value column for editing (only primitives)
-                    if !pair.is_reference && click_pos.x > rect.min.x + key_column_width
+                    if !pair.is_reference
+                        && click_pos.x > rect.min.x + key_column_width
                         && click_pos.x < delete_button_x - 5.0
                     {
                         return Some(ClickAction::EditCell(
@@ -1584,7 +1686,12 @@ impl JsonGraph {
 
     /// Get context menu information for a right-click position
     /// Returns None if not clicking on a row
-    fn get_context_menu_info(&self, node: &GraphNode, rect: Rect, click_pos: Pos2) -> Option<ContextMenuState> {
+    fn get_context_menu_info(
+        &self,
+        node: &GraphNode,
+        rect: Rect,
+        click_pos: Pos2,
+    ) -> Option<ContextMenuState> {
         let header_height = 25.0 * self.zoom;
         let row_height = 22.0 * self.zoom;
 
@@ -1736,22 +1843,20 @@ impl JsonGraph {
     fn get_cell_value(&self, node: &GraphNode, key: &str) -> Option<String> {
         match &node.content {
             NodeContent::Object(pairs) => {
-                pairs.iter()
-                    .find(|p| p.key == key)
-                    .map(|p| {
-                        // Return value without quotes for strings, raw for others
-                        if p.value_type == NodeType::String {
-                            // Remove quotes from display
-                            let display = &p.value_display;
-                            if display.starts_with('"') && display.ends_with('"') {
-                                display[1..display.len()-1].to_string()
-                            } else {
-                                display.clone()
-                            }
+                pairs.iter().find(|p| p.key == key).map(|p| {
+                    // Return value without quotes for strings, raw for others
+                    if p.value_type == NodeType::String {
+                        // Remove quotes from display
+                        let display = &p.value_display;
+                        if display.starts_with('"') && display.ends_with('"') {
+                            display[1..display.len() - 1].to_string()
                         } else {
-                            p.value_display.clone()
+                            display.clone()
                         }
-                    })
+                    } else {
+                        p.value_display.clone()
+                    }
+                })
             }
             NodeContent::Array(items) => {
                 if let Ok(index) = key.parse::<usize>() {
@@ -1760,7 +1865,7 @@ impl JsonGraph {
                         if item.value_type == NodeType::String {
                             let display = &item.value_display;
                             if display.starts_with('"') && display.ends_with('"') {
-                                display[1..display.len()-1].to_string()
+                                display[1..display.len() - 1].to_string()
                             } else {
                                 display.clone()
                             }
@@ -1852,7 +1957,10 @@ mod tests {
 
         // Check that user object has name and age in its content
         // Find the second object node (id > 0)
-        let user_node = graph.nodes.iter().find(|n| n.id > 0 && n.label.contains("Object"));
+        let user_node = graph
+            .nodes
+            .iter()
+            .find(|n| n.id > 0 && n.label.contains("Object"));
         assert!(user_node.is_some());
         if let NodeContent::Object(pairs) = &user_node.unwrap().content {
             assert_eq!(pairs.len(), 2);
