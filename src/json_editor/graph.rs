@@ -102,13 +102,35 @@ pub struct EditingCell {
     pub value_type: NodeType,
 }
 
-/// Result of a completed edit operation
+/// Clicked action on a node
+#[derive(Debug, Clone)]
+pub enum ClickAction {
+    /// Edit a cell value
+    EditCell(String, NodeType),
+    /// Delete a row
+    DeleteRow(String),
+    /// Add a new row
+    AddRow,
+}
+
+/// Type of modification operation
+#[derive(Debug, Clone)]
+pub enum ModifyOperation {
+    /// Update an existing value
+    Update { new_value: String },
+    /// Delete a property or array item
+    Delete,
+    /// Add a new property (for Objects) or item (for Arrays)
+    Add { key: String, value: String },
+}
+
+/// Result of a completed modification operation
 #[derive(Debug, Clone)]
 pub struct EditResult {
-    /// JSON path to the edited value
+    /// JSON path to the modified location
     pub json_path: Vec<String>,
-    /// The new value (as JSON-formatted string)
-    pub new_value: String,
+    /// The operation performed
+    pub operation: ModifyOperation,
 }
 
 /// JSON Graph visualization
@@ -523,10 +545,14 @@ impl JsonGraph {
                         Color32::from_gray(240),
                     );
 
+                    // Reserve space for delete button (20px from right)
+                    let delete_button_size = 16.0 * zoom;
+                    let delete_button_x = rect.max.x - delete_button_size - 5.0;
+
                     // Draw value (right column) with type-specific color
                     let value_rect = Rect::from_min_size(
                         Pos2::new(rect.min.x + key_column_width + 5.0, y),
-                        Vec2::new(rect.width() - key_column_width - 10.0, row_height),
+                        Vec2::new(rect.width() - key_column_width - delete_button_size - 20.0, row_height),
                     );
                     let value_color = if pair.is_reference {
                         Color32::from_rgb(150, 200, 255) // Light blue for references
@@ -540,10 +566,33 @@ impl JsonGraph {
                         egui::FontId::monospace(font_size),
                         value_color,
                     );
+
+                    // Draw delete button (X icon)
+                    let delete_center = Pos2::new(delete_button_x + delete_button_size / 2.0, y + row_height / 2.0);
+
+                    // Draw button background (light gray circle)
+                    painter.circle_filled(delete_center, delete_button_size / 2.0, Color32::from_rgb(80, 80, 80));
+
+                    // Draw X
+                    let x_size = delete_button_size * 0.4;
+                    painter.line_segment(
+                        [
+                            delete_center + Vec2::new(-x_size, -x_size),
+                            delete_center + Vec2::new(x_size, x_size),
+                        ],
+                        Stroke::new(2.0 * zoom, Color32::WHITE),
+                    );
+                    painter.line_segment(
+                        [
+                            delete_center + Vec2::new(x_size, -x_size),
+                            delete_center + Vec2::new(-x_size, x_size),
+                        ],
+                        Stroke::new(2.0 * zoom, Color32::WHITE),
+                    );
                 }
 
                 // Show "..." if there are more rows
-                if pairs.len() > max_visible_rows {
+                let bottom_y = if pairs.len() > max_visible_rows {
                     let y = rect.min.y + header_height + (max_visible_rows as f32 * row_height);
                     painter.text(
                         Pos2::new(rect.center().x, y),
@@ -552,7 +601,33 @@ impl JsonGraph {
                         egui::FontId::proportional(font_size),
                         Color32::from_gray(200),
                     );
-                }
+                    y + row_height
+                } else {
+                    rect.min.y + header_height + (pairs.len() as f32 * row_height)
+                };
+
+                // Draw "Add Property" button at the bottom
+                let add_button_height = 20.0 * zoom;
+                let add_button_rect = Rect::from_min_size(
+                    Pos2::new(rect.min.x + 5.0, bottom_y + 5.0),
+                    Vec2::new(rect.width() - 10.0, add_button_height),
+                );
+
+                // Button background
+                painter.rect_filled(
+                    add_button_rect,
+                    3.0,
+                    Color32::from_rgb(60, 120, 80),
+                );
+
+                // Button text
+                painter.text(
+                    add_button_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "+ Add Property",
+                    egui::FontId::proportional((10.0 * zoom).max(8.0)),
+                    Color32::WHITE,
+                );
             }
             NodeContent::Array(items) => {
                 // Draw header with label
@@ -615,10 +690,14 @@ impl JsonGraph {
                         Color32::from_gray(200),
                     );
 
+                    // Reserve space for delete button
+                    let delete_button_size = 16.0 * zoom;
+                    let delete_button_x = rect.max.x - delete_button_size - 5.0;
+
                     // Draw value (right column) with type-specific color
                     let value_rect = Rect::from_min_size(
                         Pos2::new(rect.min.x + index_column_width + 5.0, y),
-                        Vec2::new(rect.width() - index_column_width - 10.0, row_height),
+                        Vec2::new(rect.width() - index_column_width - delete_button_size - 20.0, row_height),
                     );
                     let value_color = if item.is_reference {
                         Color32::from_rgb(150, 200, 255) // Light blue for references
@@ -632,10 +711,33 @@ impl JsonGraph {
                         egui::FontId::monospace(font_size),
                         value_color,
                     );
+
+                    // Draw delete button (X icon)
+                    let delete_center = Pos2::new(delete_button_x + delete_button_size / 2.0, y + row_height / 2.0);
+
+                    // Draw button background (light gray circle)
+                    painter.circle_filled(delete_center, delete_button_size / 2.0, Color32::from_rgb(80, 80, 80));
+
+                    // Draw X
+                    let x_size = delete_button_size * 0.4;
+                    painter.line_segment(
+                        [
+                            delete_center + Vec2::new(-x_size, -x_size),
+                            delete_center + Vec2::new(x_size, x_size),
+                        ],
+                        Stroke::new(2.0 * zoom, Color32::WHITE),
+                    );
+                    painter.line_segment(
+                        [
+                            delete_center + Vec2::new(x_size, -x_size),
+                            delete_center + Vec2::new(-x_size, x_size),
+                        ],
+                        Stroke::new(2.0 * zoom, Color32::WHITE),
+                    );
                 }
 
                 // Show "..." if there are more rows
-                if items.len() > max_visible_rows {
+                let bottom_y = if items.len() > max_visible_rows {
                     let y = rect.min.y + header_height + (max_visible_rows as f32 * row_height);
                     painter.text(
                         Pos2::new(rect.center().x, y),
@@ -644,7 +746,33 @@ impl JsonGraph {
                         egui::FontId::proportional(font_size),
                         Color32::from_gray(200),
                     );
-                }
+                    y + row_height
+                } else {
+                    rect.min.y + header_height + (items.len() as f32 * row_height)
+                };
+
+                // Draw "Add Item" button at the bottom
+                let add_button_height = 20.0 * zoom;
+                let add_button_rect = Rect::from_min_size(
+                    Pos2::new(rect.min.x + 5.0, bottom_y + 5.0),
+                    Vec2::new(rect.width() - 10.0, add_button_height),
+                );
+
+                // Button background
+                painter.rect_filled(
+                    add_button_rect,
+                    3.0,
+                    Color32::from_rgb(60, 120, 80),
+                );
+
+                // Button text
+                painter.text(
+                    add_button_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "+ Add Item",
+                    egui::FontId::proportional((10.0 * zoom).max(8.0)),
+                    Color32::WHITE,
+                );
             }
             NodeContent::Primitive(value) => {
                 // Simple text rendering for primitive values
@@ -762,17 +890,44 @@ impl JsonGraph {
                 && let Some(click_pos) = response.interact_pointer_pos()
                 && rect.contains(click_pos)
             {
-                // Check if clicking on a cell for editing (only primitive values, not references)
-                if let Some((key, value_type)) = self.get_clicked_cell(node, rect, click_pos) {
-                    // Enter edit mode for this cell
-                    if let Some(current_value) = self.get_cell_value(node, &key) {
-                        self.editing_cell = Some(EditingCell {
-                            node_id: node.id,
-                            key: key.clone(),
-                            text: current_value,
-                            value_type,
-                        });
-                        self.log_to_console(&format!("Editing cell: {} = {:?}", key, self.editing_cell.as_ref().unwrap().text));
+                // Check what action was clicked
+                if let Some(action) = self.get_click_action(node, rect, click_pos) {
+                    match action {
+                        ClickAction::EditCell(key, value_type) => {
+                            // Enter edit mode for this cell
+                            if let Some(current_value) = self.get_cell_value(node, &key) {
+                                self.editing_cell = Some(EditingCell {
+                                    node_id: node.id,
+                                    key: key.clone(),
+                                    text: current_value,
+                                    value_type,
+                                });
+                                self.log_to_console(&format!(
+                                    "Editing cell: {} = {:?}",
+                                    key,
+                                    self.editing_cell.as_ref().unwrap().text
+                                ));
+                            }
+                        }
+                        ClickAction::DeleteRow(key) => {
+                            // Handle delete operation
+                            let mut json_path = node.json_path.clone();
+                            json_path.push(key.clone());
+
+                            self.pending_edit = Some(EditResult {
+                                json_path,
+                                operation: ModifyOperation::Delete,
+                            });
+
+                            self.log_to_console(&format!("Delete row: {}", key));
+                            selection_changed = true;
+                        }
+                        ClickAction::AddRow => {
+                            // Handle add operation
+                            // For now, we'll show a dialog in the editing window
+                            self.log_to_console("Add row clicked");
+                            // TODO: Show add property/item dialog
+                        }
                     }
                 } else {
                     // Just select the node
@@ -921,7 +1076,9 @@ impl JsonGraph {
                         // Store edit result for App to process
                         self.pending_edit = Some(EditResult {
                             json_path,
-                            new_value: validated_value.clone(),
+                            operation: ModifyOperation::Update {
+                                new_value: validated_value.clone(),
+                            },
                         });
 
                         self.log_to_console(&format!("Saved edit: {} = {}", key, text));
@@ -947,11 +1104,12 @@ impl JsonGraph {
         canvas_rect.min + transformed
     }
 
-    /// Check if a click position is on a cell and return (key, value_type) if editable
-    /// Returns None if clicking on a reference (Object/Array) or header
-    fn get_clicked_cell(&self, node: &GraphNode, rect: Rect, click_pos: Pos2) -> Option<(String, NodeType)> {
+    /// Check if a click position is on an action area (edit, delete, add button)
+    /// Returns None if clicking on header or empty space
+    fn get_click_action(&self, node: &GraphNode, rect: Rect, click_pos: Pos2) -> Option<ClickAction> {
         let header_height = 25.0 * self.zoom;
         let row_height = 22.0 * self.zoom;
+        let delete_button_size = 16.0 * self.zoom;
 
         // Check if click is below header
         if click_pos.y < rect.min.y + header_height {
@@ -964,33 +1122,100 @@ impl JsonGraph {
 
         match &node.content {
             NodeContent::Object(pairs) => {
-                if row_index < pairs.len() {
+                let max_visible_rows = pairs.len().min(10);
+                let key_column_width = rect.width() * 0.4;
+                let delete_button_x = rect.max.x - delete_button_size - 5.0;
+
+                // Check if clicking on "Add Property" button
+                let bottom_y = if pairs.len() > 10 {
+                    rect.min.y + header_height + (10.0 * row_height) + row_height
+                } else {
+                    rect.min.y + header_height + (pairs.len() as f32 * row_height)
+                };
+                let add_button_height = 20.0 * self.zoom;
+                if click_pos.y >= bottom_y + 5.0
+                    && click_pos.y <= bottom_y + 5.0 + add_button_height
+                    && click_pos.x >= rect.min.x + 5.0
+                    && click_pos.x <= rect.max.x - 5.0
+                {
+                    return Some(ClickAction::AddRow);
+                }
+
+                // Check if clicking within a valid row
+                if row_index < max_visible_rows {
                     let pair = &pairs[row_index];
-                    // Only allow editing primitive values, not references
-                    if !pair.is_reference {
-                        // Check if clicking on the value column (right side)
-                        let key_column_width = rect.width() * 0.4;
-                        if click_pos.x > rect.min.x + key_column_width {
-                            return Some((pair.key.clone(), pair.value_type.clone()));
-                        }
+                    let y = rect.min.y + header_height + (row_index as f32 * row_height);
+
+                    // Check if clicking on delete button
+                    let delete_center_x = delete_button_x + delete_button_size / 2.0;
+                    let delete_center_y = y + row_height / 2.0;
+                    let distance = ((click_pos.x - delete_center_x).powi(2)
+                        + (click_pos.y - delete_center_y).powi(2))
+                    .sqrt();
+                    if distance <= delete_button_size / 2.0 {
+                        return Some(ClickAction::DeleteRow(pair.key.clone()));
+                    }
+
+                    // Check if clicking on value column for editing (only primitives)
+                    if !pair.is_reference && click_pos.x > rect.min.x + key_column_width
+                        && click_pos.x < delete_button_x - 5.0
+                    {
+                        return Some(ClickAction::EditCell(
+                            pair.key.clone(),
+                            pair.value_type.clone(),
+                        ));
                     }
                 }
             }
             NodeContent::Array(items) => {
-                if row_index < items.len() {
+                let max_visible_rows = items.len().min(10);
+                let index_column_width = 40.0 * self.zoom;
+                let delete_button_x = rect.max.x - delete_button_size - 5.0;
+
+                // Check if clicking on "Add Item" button
+                let bottom_y = if items.len() > 10 {
+                    rect.min.y + header_height + (10.0 * row_height) + row_height
+                } else {
+                    rect.min.y + header_height + (items.len() as f32 * row_height)
+                };
+                let add_button_height = 20.0 * self.zoom;
+                if click_pos.y >= bottom_y + 5.0
+                    && click_pos.y <= bottom_y + 5.0 + add_button_height
+                    && click_pos.x >= rect.min.x + 5.0
+                    && click_pos.x <= rect.max.x - 5.0
+                {
+                    return Some(ClickAction::AddRow);
+                }
+
+                // Check if clicking within a valid row
+                if row_index < max_visible_rows {
                     let item = &items[row_index];
-                    // Only allow editing primitive values, not references
-                    if !item.is_reference {
-                        // Check if clicking on the value column (right side)
-                        let index_column_width = 40.0 * self.zoom;
-                        if click_pos.x > rect.min.x + index_column_width {
-                            return Some((item.index.to_string(), item.value_type.clone()));
-                        }
+                    let y = rect.min.y + header_height + (row_index as f32 * row_height);
+
+                    // Check if clicking on delete button
+                    let delete_center_x = delete_button_x + delete_button_size / 2.0;
+                    let delete_center_y = y + row_height / 2.0;
+                    let distance = ((click_pos.x - delete_center_x).powi(2)
+                        + (click_pos.y - delete_center_y).powi(2))
+                    .sqrt();
+                    if distance <= delete_button_size / 2.0 {
+                        return Some(ClickAction::DeleteRow(item.index.to_string()));
+                    }
+
+                    // Check if clicking on value column for editing (only primitives)
+                    if !item.is_reference
+                        && click_pos.x > rect.min.x + index_column_width
+                        && click_pos.x < delete_button_x - 5.0
+                    {
+                        return Some(ClickAction::EditCell(
+                            item.index.to_string(),
+                            item.value_type.clone(),
+                        ));
                     }
                 }
             }
             NodeContent::Primitive(_) => {
-                // Primitive nodes don't have editable cells in this implementation
+                // Primitive nodes don't have interactive elements
                 return None;
             }
         }

@@ -103,26 +103,48 @@ impl App {
 
             // Check if there's a pending edit from the graph
             if let Some(edit_result) = self.json_graph.take_pending_edit() {
-                utils::log(
-                    "App",
-                    &format!(
-                        "Processing graph edit: {:?} = {}",
-                        edit_result.json_path, edit_result.new_value
-                    ),
-                );
+                use crate::json_editor::graph::ModifyOperation;
 
-                // Update the JSON editor with the new value
-                if self
-                    .json_editor
-                    .update_value_at_path(&edit_result.json_path, &edit_result.new_value)
-                {
+                let success = match edit_result.operation {
+                    ModifyOperation::Update { ref new_value } => {
+                        utils::log(
+                            "App",
+                            &format!(
+                                "Processing graph update: {:?} = {}",
+                                edit_result.json_path, new_value
+                            ),
+                        );
+                        self.json_editor
+                            .update_value_at_path(&edit_result.json_path, new_value)
+                    }
+                    ModifyOperation::Delete => {
+                        utils::log(
+                            "App",
+                            &format!("Processing graph delete: {:?}", edit_result.json_path),
+                        );
+                        self.json_editor.delete_value_at_path(&edit_result.json_path)
+                    }
+                    ModifyOperation::Add { ref key, ref value } => {
+                        utils::log(
+                            "App",
+                            &format!(
+                                "Processing graph add: {:?} + {} = {}",
+                                edit_result.json_path, key, value
+                            ),
+                        );
+                        // TODO: Implement add operation
+                        false
+                    }
+                };
+
+                if success {
                     // Rebuild graph from updated JSON
                     if let Some(value) = self.json_editor.parsed_value() {
                         self.json_graph.build_from_json(value);
-                        utils::log("App", "Graph rebuilt after edit");
+                        utils::log("App", "Graph rebuilt after modification");
                     }
                 } else {
-                    utils::log("App", "Failed to update JSON from graph edit");
+                    utils::log("App", "Failed to apply modification from graph");
                 }
             }
 
