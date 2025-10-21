@@ -45,6 +45,14 @@ impl App {
                     self.left_panel_width = 400.0;
                     utils::log("App", "Layout reset");
                 }
+
+                // Right-aligned GitHub link button
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("🔗 GitHub Source").clicked() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/zlcjfalsvk/Json-Editor"));
+                        utils::log("App", "Opening GitHub source");
+                    }
+                });
             });
         });
 
