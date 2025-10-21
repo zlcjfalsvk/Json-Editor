@@ -1,3 +1,4 @@
+use crate::utils;
 use serde_json::Value;
 
 /// JSON Editor state and functionality
@@ -224,16 +225,7 @@ impl JsonEditor {
 
     /// Log message to browser console (WASM) or stdout (desktop)
     fn log_to_console(&self, message: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            use web_sys::console;
-            console::log_1(&format!("[JSON Editor] {}", message).into());
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            println!("[JSON Editor] {}", message);
-        }
+        utils::log("JSON Editor", message);
     }
 
     /// Render the editor UI using egui
