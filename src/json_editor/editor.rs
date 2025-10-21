@@ -239,6 +239,46 @@ impl JsonEditor {
         let mut changed = false;
         let text_edit_id = ui.id().with("json_text_edit");
 
+        // Handle keyboard shortcuts
+        let mut undo_requested = false;
+        let mut redo_requested = false;
+        let mut select_all_requested = false;
+
+        ui.input(|i| {
+            // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (macOS)
+            if i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift {
+                undo_requested = true;
+            }
+
+            // Redo: Ctrl+Y (Windows/Linux) or Cmd+Shift+Z (macOS) or Ctrl+Shift+Z
+            if (i.modifiers.command && i.key_pressed(egui::Key::Y))
+                || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
+            {
+                redo_requested = true;
+            }
+
+            // Select All: Ctrl+A (Windows/Linux) or Cmd+A (macOS)
+            // Note: egui's TextEdit handles this automatically, but we detect it here for logging
+            if i.modifiers.command && i.key_pressed(egui::Key::A) {
+                select_all_requested = true;
+            }
+        });
+
+        // Process undo/redo requests
+        if undo_requested && self.can_undo() {
+            self.undo();
+            changed = true;
+            self.log_to_console("Undo via keyboard shortcut");
+        }
+        if redo_requested && self.can_redo() {
+            self.redo();
+            changed = true;
+            self.log_to_console("Redo via keyboard shortcut");
+        }
+        if select_all_requested {
+            self.log_to_console("Select all via keyboard shortcut");
+        }
+
         // Toolbar
         ui.horizontal(|ui| {
             // Format buttons
