@@ -2,6 +2,8 @@ use crate::utils;
 use egui::{Color32, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use serde_json::Value;
 
+use super::minimap::Minimap;
+
 /// A node in the JSON graph visualization
 #[derive(Debug, Clone)]
 pub struct GraphNode {
@@ -201,6 +203,8 @@ pub struct JsonGraph {
     context_menu: Option<ContextMenuState>,
     /// Pending edit result to be processed by App
     pending_edit: Option<EditResult>,
+    /// Minimap for navigation
+    minimap: Minimap,
 }
 
 impl Default for JsonGraph {
@@ -218,6 +222,7 @@ impl Default for JsonGraph {
             renaming_key: None,
             context_menu: None,
             pending_edit: None,
+            minimap: Minimap::new(),
         }
     }
 }
@@ -856,6 +861,18 @@ impl JsonGraph {
             }
 
             ui.separator();
+
+            // Minimap toggle
+            let mut minimap_visible = self.minimap.is_visible();
+            if ui.checkbox(&mut minimap_visible, "Minimap").clicked() {
+                self.minimap.set_visible(minimap_visible);
+                self.log_to_console(&format!(
+                    "Minimap: {}",
+                    if minimap_visible { "on" } else { "off" }
+                ));
+            }
+
+            ui.separator();
             ui.label(format!("Zoom: {:.2}x", self.zoom));
         });
 
@@ -871,7 +888,7 @@ impl JsonGraph {
         if response.dragged() {
             self.offset += response.drag_delta();
             self.dragging = true;
-            self.log_to_console("Panning graph");
+            ui.ctx().request_repaint(); // Ensure minimap updates during panning
         } else {
             self.dragging = false;
         }
@@ -880,9 +897,27 @@ impl JsonGraph {
         if response.hovered() {
             let scroll_delta = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll_delta != 0.0 {
+                let old_zoom = self.zoom;
                 self.zoom *= 1.0 + scroll_delta * 0.001;
                 self.zoom = self.zoom.clamp(0.1, 5.0);
+
+                // Adjust offset to zoom towards mouse position
+                if let Some(hover_pos) = response.hover_pos() {
+                    let hover_pos_in_canvas = hover_pos - response.rect.min;
+
+                    // Keep the point under the mouse fixed during zoom
+                    // Before zoom: world_pos = (screen_pos - offset) / old_zoom
+                    // After zoom:  world_pos = (screen_pos - new_offset) / new_zoom
+                    // We want world_pos to remain the same, so:
+                    // (screen_pos - offset) / old_zoom = (screen_pos - new_offset) / new_zoom
+                    let world_pos_before = (hover_pos_in_canvas - self.offset) / old_zoom;
+                    let world_pos_after = (hover_pos_in_canvas - self.offset) / self.zoom;
+                    let offset_delta = (world_pos_after - world_pos_before) * self.zoom;
+                    self.offset += offset_delta;
+                }
+
                 self.log_to_console(&format!("Zoom: {:.2}x", self.zoom));
+                ui.ctx().request_repaint(); // Ensure minimap updates
             }
         }
 
@@ -1571,6 +1606,19 @@ impl JsonGraph {
         // Close context menu if user clicks on the canvas (outside the menu)
         if self.context_menu.is_some() && response.clicked() {
             self.context_menu = None;
+        }
+
+        // Render minimap in bottom-right corner
+        if let Some(new_offset) = self.minimap.render(
+            ui,
+            &painter,
+            canvas_rect,
+            &self.nodes,
+            self.zoom,
+            self.offset,
+        ) {
+            self.offset = new_offset;
+            self.log_to_console("Navigated via minimap");
         }
 
         selection_changed
