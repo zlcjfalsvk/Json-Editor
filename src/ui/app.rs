@@ -15,10 +15,6 @@ pub struct App {
     left_panel_width: f32,
     /// Whether the graph has been initialized
     graph_initialized: bool,
-    /// Enable sync from graph to editor
-    sync_graph_to_editor: bool,
-    /// Enable sync from editor to graph
-    sync_editor_to_graph: bool,
 }
 
 impl Default for App {
@@ -28,8 +24,6 @@ impl Default for App {
             json_graph: JsonGraph::new(),
             left_panel_width: 400.0,
             graph_initialized: false,
-            sync_graph_to_editor: true,
-            sync_editor_to_graph: true,
         }
     }
 }
@@ -51,43 +45,6 @@ impl App {
                     self.left_panel_width = 400.0;
                     utils::log("App", "Layout reset");
                 }
-
-                ui.separator();
-
-                // Sync checkboxes
-                if ui
-                    .checkbox(&mut self.sync_graph_to_editor, "Sync Graph → Editor")
-                    .clicked()
-                {
-                    utils::log(
-                        "App",
-                        &format!(
-                            "Graph to Editor sync: {}",
-                            if self.sync_graph_to_editor {
-                                "enabled"
-                            } else {
-                                "disabled"
-                            }
-                        ),
-                    );
-                }
-
-                if ui
-                    .checkbox(&mut self.sync_editor_to_graph, "Sync Editor → Graph")
-                    .clicked()
-                {
-                    utils::log(
-                        "App",
-                        &format!(
-                            "Editor to Graph sync: {}",
-                            if self.sync_editor_to_graph {
-                                "enabled"
-                            } else {
-                                "disabled"
-                            }
-                        ),
-                    );
-                }
             });
         });
 
@@ -104,7 +61,6 @@ impl App {
 
                 // Check if a line was clicked in the editor (for editor-to-graph sync)
                 if let Some(clicked_line) = self.json_editor.take_clicked_line()
-                    && self.sync_editor_to_graph
                     && let Some(path) = self.json_editor.find_path_for_line(clicked_line)
                 {
                     self.json_graph.select_by_path(&path);
@@ -145,9 +101,8 @@ impl App {
 
             let selection_changed = self.json_graph.ui(ui);
 
-            // Sync graph selection to editor if enabled
+            // Sync graph selection to editor
             if selection_changed
-                && self.sync_graph_to_editor
                 && let Some(path) = self.json_graph.get_selected_path()
                 && let Some(line) = self.json_editor.find_line_for_path(&path)
             {
