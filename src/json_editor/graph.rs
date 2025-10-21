@@ -89,6 +89,19 @@ pub struct GraphEdge {
     pub label: Option<String>,
 }
 
+/// Editing state for a cell in the graph
+#[derive(Debug, Clone)]
+pub struct EditingCell {
+    /// Node ID being edited
+    pub node_id: usize,
+    /// Key or index being edited
+    pub key: String,
+    /// Current editing text
+    pub text: String,
+    /// Original value type (for validation)
+    pub value_type: NodeType,
+}
+
 /// JSON Graph visualization
 pub struct JsonGraph {
     nodes: Vec<GraphNode>,
@@ -102,6 +115,8 @@ pub struct JsonGraph {
     dragging: bool,
     /// Selected node ID
     selected_node: Option<usize>,
+    /// Currently editing cell (if any)
+    editing_cell: Option<EditingCell>,
 }
 
 impl Default for JsonGraph {
@@ -114,6 +129,7 @@ impl Default for JsonGraph {
             offset: Vec2::ZERO,
             dragging: false,
             selected_node: None,
+            editing_cell: None,
         }
     }
 }
@@ -129,6 +145,7 @@ impl JsonGraph {
         self.edges.clear();
         self.next_id = 0;
         self.selected_node = None;
+        self.editing_cell = None; // Cancel any ongoing edits
 
         if value.is_null() {
             return;
@@ -726,12 +743,27 @@ impl JsonGraph {
                 && let Some(click_pos) = response.interact_pointer_pos()
                 && rect.contains(click_pos)
             {
-                self.selected_node = Some(node.id);
-                selection_changed = true;
-                self.log_to_console(&format!(
-                    "Selected node: {} (path: {:?})",
-                    node.label, node.json_path
-                ));
+                // Check if clicking on a cell for editing (only primitive values, not references)
+                if let Some((key, value_type)) = self.get_clicked_cell(node, rect, click_pos) {
+                    // Enter edit mode for this cell
+                    if let Some(current_value) = self.get_cell_value(node, &key) {
+                        self.editing_cell = Some(EditingCell {
+                            node_id: node.id,
+                            key: key.clone(),
+                            text: current_value,
+                            value_type,
+                        });
+                        self.log_to_console(&format!("Editing cell: {} = {:?}", key, self.editing_cell.as_ref().unwrap().text));
+                    }
+                } else {
+                    // Just select the node
+                    self.selected_node = Some(node.id);
+                    selection_changed = true;
+                    self.log_to_console(&format!(
+                        "Selected node: {} (path: {:?})",
+                        node.label, node.json_path
+                    ));
+                }
             }
 
             // Check if this node is selected
@@ -780,6 +812,103 @@ impl JsonGraph {
             );
         }
 
+        // Show editing window if a cell is being edited
+        let mut close_window = false;
+        let mut save_edit = false;
+        let mut edit_data: Option<(usize, String, String, NodeType)> = None;
+
+        if let Some(editing) = &mut self.editing_cell {
+            egui::Window::new("Edit Value")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ui.ctx(), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Key:");
+                        ui.label(&editing.key);
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Type:");
+                        ui.label(format!("{:?}", editing.value_type));
+                    });
+
+                    ui.separator();
+
+                    ui.label("Value:");
+                    let text_edit = egui::TextEdit::singleline(&mut editing.text)
+                        .desired_width(300.0)
+                        .font(egui::TextStyle::Monospace);
+
+                    let response = ui.add(text_edit);
+
+                    // Auto-focus on first show
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        save_edit = true;
+                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        close_window = true;
+                    }
+
+                    // Request focus if not focused
+                    if !response.has_focus() {
+                        response.request_focus();
+                    }
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Save").clicked() {
+                            save_edit = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close_window = true;
+                        }
+                    });
+
+                    // Show validation hint
+                    match editing.value_type {
+                        NodeType::Number => {
+                            ui.label(egui::RichText::new("💡 Enter a number").small().italics());
+                        }
+                        NodeType::Boolean => {
+                            ui.label(egui::RichText::new("💡 Enter true or false").small().italics());
+                        }
+                        _ => {}
+                    }
+                });
+
+            // Extract data for later use (to avoid borrow checker issues)
+            if save_edit {
+                edit_data = Some((
+                    editing.node_id,
+                    editing.key.clone(),
+                    editing.text.clone(),
+                    editing.value_type.clone(),
+                ));
+            }
+        }
+
+        // Process save outside of the borrow
+        if let Some((node_id, key, text, value_type)) = edit_data {
+            // Validate first
+            if let Some(validated_value) = Self::validate_value(&text, &value_type) {
+                // Then update
+                if let Some(node) = self.nodes.iter_mut().find(|n| n.id == node_id) {
+                    if Self::update_cell_value(node, &key, &validated_value) {
+                        self.log_to_console(&format!("Saved edit: {} = {}", key, text));
+                        close_window = true;
+                        selection_changed = true; // Trigger synchronization
+                    }
+                }
+            } else {
+                self.log_to_console("Validation failed");
+            }
+        }
+
+        if close_window {
+            self.editing_cell = None;
+        }
+
         selection_changed
     }
 
@@ -787,6 +916,168 @@ impl JsonGraph {
     fn transform_pos(&self, pos: Pos2, canvas_rect: Rect) -> Pos2 {
         let transformed = pos.to_vec2() * self.zoom + self.offset;
         canvas_rect.min + transformed
+    }
+
+    /// Check if a click position is on a cell and return (key, value_type) if editable
+    /// Returns None if clicking on a reference (Object/Array) or header
+    fn get_clicked_cell(&self, node: &GraphNode, rect: Rect, click_pos: Pos2) -> Option<(String, NodeType)> {
+        let header_height = 25.0 * self.zoom;
+        let row_height = 22.0 * self.zoom;
+
+        // Check if click is below header
+        if click_pos.y < rect.min.y + header_height {
+            return None; // Clicking on header
+        }
+
+        // Calculate which row was clicked
+        let relative_y = click_pos.y - (rect.min.y + header_height);
+        let row_index = (relative_y / row_height).floor() as usize;
+
+        match &node.content {
+            NodeContent::Object(pairs) => {
+                if row_index < pairs.len() {
+                    let pair = &pairs[row_index];
+                    // Only allow editing primitive values, not references
+                    if !pair.is_reference {
+                        // Check if clicking on the value column (right side)
+                        let key_column_width = rect.width() * 0.4;
+                        if click_pos.x > rect.min.x + key_column_width {
+                            return Some((pair.key.clone(), pair.value_type.clone()));
+                        }
+                    }
+                }
+            }
+            NodeContent::Array(items) => {
+                if row_index < items.len() {
+                    let item = &items[row_index];
+                    // Only allow editing primitive values, not references
+                    if !item.is_reference {
+                        // Check if clicking on the value column (right side)
+                        let index_column_width = 40.0 * self.zoom;
+                        if click_pos.x > rect.min.x + index_column_width {
+                            return Some((item.index.to_string(), item.value_type.clone()));
+                        }
+                    }
+                }
+            }
+            NodeContent::Primitive(_) => {
+                // Primitive nodes don't have editable cells in this implementation
+                return None;
+            }
+        }
+
+        None
+    }
+
+    /// Validate a value based on its type
+    /// Returns Some(validated_string) if valid, None if invalid
+    fn validate_value(new_value: &str, value_type: &NodeType) -> Option<String> {
+        match value_type {
+            NodeType::String => {
+                // Strings are always valid
+                Some(format!("\"{}\"", new_value))
+            }
+            NodeType::Number => {
+                // Try to parse as number
+                if new_value.parse::<f64>().is_ok() {
+                    Some(new_value.to_string())
+                } else {
+                    None
+                }
+            }
+            NodeType::Boolean => {
+                // Must be "true" or "false"
+                let lowercase = new_value.to_lowercase();
+                if lowercase == "true" || lowercase == "false" {
+                    Some(lowercase)
+                } else {
+                    None
+                }
+            }
+            NodeType::Null => {
+                // Only accept "null"
+                if new_value.to_lowercase() == "null" {
+                    Some("null".to_string())
+                } else {
+                    None
+                }
+            }
+            _ => {
+                // Object and Array types shouldn't be edited inline
+                None
+            }
+        }
+    }
+
+    /// Update a cell value in a node
+    /// Returns true if update succeeded
+    fn update_cell_value(node: &mut GraphNode, key: &str, validated_value: &str) -> bool {
+        match &mut node.content {
+            NodeContent::Object(pairs) => {
+                if let Some(pair) = pairs.iter_mut().find(|p| p.key == key) {
+                    pair.value_display = validated_value.to_string();
+                    return true;
+                }
+            }
+            NodeContent::Array(items) => {
+                if let Ok(index) = key.parse::<usize>() {
+                    if let Some(item) = items.get_mut(index) {
+                        item.value_display = validated_value.to_string();
+                        return true;
+                    }
+                }
+            }
+            NodeContent::Primitive(_) => {
+                // Primitives don't have cells
+                return false;
+            }
+        }
+
+        false
+    }
+
+    /// Get the current value of a cell as a string
+    fn get_cell_value(&self, node: &GraphNode, key: &str) -> Option<String> {
+        match &node.content {
+            NodeContent::Object(pairs) => {
+                pairs.iter()
+                    .find(|p| p.key == key)
+                    .map(|p| {
+                        // Return value without quotes for strings, raw for others
+                        if p.value_type == NodeType::String {
+                            // Remove quotes from display
+                            let display = &p.value_display;
+                            if display.starts_with('"') && display.ends_with('"') {
+                                display[1..display.len()-1].to_string()
+                            } else {
+                                display.clone()
+                            }
+                        } else {
+                            p.value_display.clone()
+                        }
+                    })
+            }
+            NodeContent::Array(items) => {
+                if let Ok(index) = key.parse::<usize>() {
+                    items.get(index).map(|item| {
+                        // Return value without quotes for strings, raw for others
+                        if item.value_type == NodeType::String {
+                            let display = &item.value_display;
+                            if display.starts_with('"') && display.ends_with('"') {
+                                display[1..display.len()-1].to_string()
+                            } else {
+                                display.clone()
+                            }
+                        } else {
+                            item.value_display.clone()
+                        }
+                    })
+                } else {
+                    None
+                }
+            }
+            NodeContent::Primitive(_) => None,
+        }
     }
 
     /// Log message to browser console (WASM) or stdout (desktop)
