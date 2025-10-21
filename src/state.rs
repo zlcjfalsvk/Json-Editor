@@ -33,6 +33,57 @@ pub struct State<'a> {
 }
 
 impl<'a> State<'a> {
+    /// Setup fonts with CJK (Korean, Chinese, Japanese) support
+    fn setup_fonts(ctx: &egui::Context) {
+        let mut fonts = egui::FontDefinitions::default();
+
+        // Load Korean font
+        fonts.font_data.insert(
+            "noto_sans_kr".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansKR-Regular.ttf"))
+                .into(),
+        );
+
+        // Load Chinese (Simplified) font
+        fonts.font_data.insert(
+            "noto_sans_sc".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansSC-Regular.ttf"))
+                .into(),
+        );
+
+        // Load Japanese font
+        fonts.font_data.insert(
+            "noto_sans_jp".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansJP-Regular.ttf"))
+                .into(),
+        );
+
+        // Add fonts to Proportional family (used for normal text)
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .extend([
+                "noto_sans_kr".to_owned(),
+                "noto_sans_sc".to_owned(),
+                "noto_sans_jp".to_owned(),
+            ]);
+
+        // Add fonts to Monospace family (used for code)
+        fonts
+            .families
+            .entry(egui::FontFamily::Monospace)
+            .or_default()
+            .extend([
+                "noto_sans_kr".to_owned(),
+                "noto_sans_sc".to_owned(),
+                "noto_sans_jp".to_owned(),
+            ]);
+
+        // Apply font settings
+        ctx.set_fonts(fonts);
+    }
+
     /// Create a new state instance
     ///
     /// # Arguments
@@ -118,6 +169,9 @@ impl<'a> State<'a> {
 
         // Initialize egui
         let egui_ctx = egui::Context::default();
+
+        // Setup fonts with CJK support
+        Self::setup_fonts(&egui_ctx);
 
         // Get viewport info from window
         let viewport_id = egui::ViewportId::ROOT;

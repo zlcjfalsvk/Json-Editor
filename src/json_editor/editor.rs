@@ -32,6 +32,12 @@ impl Default for JsonEditor {
         let default_json = r#"{
   "name": "example",
   "version": "1.0.0",
+  "languages": {
+    "korean": "안녕하세요",
+    "chinese": "你好",
+    "japanese": "こんにちは",
+    "english": "Hello"
+  },
   "items": [
     {"id": 1, "value": "first"},
     {"id": 2, "value": "second"}

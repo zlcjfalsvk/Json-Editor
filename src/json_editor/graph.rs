@@ -94,6 +94,7 @@ impl JsonGraph {
     }
 
     /// Recursively build nodes from JSON value
+    /// Returns the width used by this subtree
     fn build_node(
         &mut self,
         value: &Value,
@@ -101,7 +102,7 @@ impl JsonGraph {
         edge_label: Option<String>,
         depth: usize,
         x_offset: f32,
-    ) -> usize {
+    ) -> f32 {
         let node_id = self.next_id;
         self.next_id += 1;
 
@@ -144,37 +145,47 @@ impl JsonGraph {
             });
         }
 
-        // Process children
+        // Process children and calculate total width
         let mut child_offset = x_offset;
+        let mut total_width = 0.0;
+
         match value {
             Value::Object(map) => {
                 for (key, child_value) in map {
-                    self.build_node(
+                    let child_width = self.build_node(
                         child_value,
                         Some(node_id),
                         Some(key.clone()),
                         depth + 1,
                         child_offset,
                     );
-                    child_offset += 150.0;
+                    child_offset += child_width;
+                    total_width += child_width;
                 }
             }
             Value::Array(arr) => {
                 for (idx, child_value) in arr.iter().enumerate() {
-                    self.build_node(
+                    let child_width = self.build_node(
                         child_value,
                         Some(node_id),
                         Some(format!("[{}]", idx)),
                         depth + 1,
                         child_offset,
                     );
-                    child_offset += 150.0;
+                    child_offset += child_width;
+                    total_width += child_width;
                 }
             }
             _ => {}
         }
 
-        node_id
+        // Return the width used by this subtree
+        // If no children, return a base width; otherwise return children's total width
+        if total_width > 0.0 {
+            total_width
+        } else {
+            150.0 // Base width for leaf nodes
+        }
     }
 
     /// Render the graph using egui
@@ -360,5 +371,73 @@ mod tests {
     fn test_node_type_colors() {
         assert_ne!(NodeType::Object.color(), NodeType::Array.color());
         assert_ne!(NodeType::String.color(), NodeType::Number.color());
+    }
+
+    #[test]
+    fn test_build_default_json() {
+        let mut graph = JsonGraph::new();
+        let json = json!({
+            "name": "example",
+            "version": "1.0.0",
+            "items": [
+                {"id": 1, "value": "first"},
+                {"id": 2, "value": "second"}
+            ]
+        });
+        graph.build_from_json(&json);
+
+        println!("\nAll nodes created:");
+        for node in &graph.nodes {
+            println!(
+                "  Node {}: {} at pos ({}, {})",
+                node.id, node.label, node.position.x, node.position.y
+            );
+        }
+
+        println!("\nAll edges:");
+        for edge in &graph.edges {
+            let from_label = graph
+                .nodes
+                .iter()
+                .find(|n| n.id == edge.from)
+                .map(|n| n.label.as_str())
+                .unwrap_or("?");
+            let to_label = graph
+                .nodes
+                .iter()
+                .find(|n| n.id == edge.to)
+                .map(|n| n.label.as_str())
+                .unwrap_or("?");
+            println!(
+                "  Edge: {} -> {} (label: {:?})",
+                from_label, to_label, edge.label
+            );
+        }
+
+        // Expected: 10 nodes
+        // 0: Object (3) - root
+        // 1: "example" - name
+        // 2: "1.0.0" - version
+        // 3: Array [2] - items
+        // 4: Object (2) - items[0]
+        // 5: 1 - items[0].id
+        // 6: "first" - items[0].value
+        // 7: Object (2) - items[1]
+        // 8: 2 - items[1].id
+        // 9: "second" - items[1].value
+
+        assert_eq!(
+            graph.nodes.len(),
+            10,
+            "Expected 10 nodes for default_json structure"
+        );
+
+        // Check that "first" value node exists
+        let has_first = graph.nodes.iter().any(|n| n.label.contains("first"));
+        assert!(has_first, "Should have a node with 'first' value");
+
+        // Check that "second" value node exists
+        let has_second = graph.nodes.iter().any(|n| n.label.contains("second"));
+        assert!(has_second, "Should have a node with 'second' value");
     }
 }
