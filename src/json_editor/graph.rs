@@ -17,6 +17,45 @@ pub struct GraphNode {
     pub size: Vec2,
     /// JSON path to this node (e.g., ["items", "0", "value"])
     pub json_path: Vec<String>,
+    /// Node content (for table-based rendering of Objects and Arrays)
+    pub content: NodeContent,
+}
+
+/// Content of a node (for table-based display)
+#[derive(Debug, Clone)]
+pub enum NodeContent {
+    /// Object with key-value pairs
+    Object(Vec<KeyValuePair>),
+    /// Array with indexed items
+    Array(Vec<ArrayItem>),
+    /// Primitive value (displayed inline)
+    Primitive(String),
+}
+
+/// A key-value pair in an Object node
+#[derive(Debug, Clone)]
+pub struct KeyValuePair {
+    /// Property key
+    pub key: String,
+    /// Value representation
+    pub value_display: String,
+    /// Type of the value
+    pub value_type: NodeType,
+    /// Whether this value is a reference to a child node (object/array)
+    pub is_reference: bool,
+}
+
+/// An array item
+#[derive(Debug, Clone)]
+pub struct ArrayItem {
+    /// Array index
+    pub index: usize,
+    /// Value representation
+    pub value_display: String,
+    /// Type of the value
+    pub value_type: NodeType,
+    /// Whether this value is a reference to a child node (object/array)
+    pub is_reference: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,33 +152,106 @@ impl JsonGraph {
         let node_id = self.next_id;
         self.next_id += 1;
 
-        let (label, node_type) = match value {
-            Value::Object(map) => (format!("Object ({})", map.len()), NodeType::Object),
-            Value::Array(arr) => (format!("Array [{}]", arr.len()), NodeType::Array),
+        // Build node content and determine type
+        let (label, node_type, content) = match value {
+            Value::Object(map) => {
+                let label = format!("Object ({})", map.len());
+                let mut pairs = Vec::new();
+
+                for (key, val) in map {
+                    let (value_display, value_type, is_reference) = match val {
+                        Value::Object(m) => (format!("{{ {} }}", m.len()), NodeType::Object, true),
+                        Value::Array(a) => (format!("[ {} ]", a.len()), NodeType::Array, true),
+                        Value::String(s) => {
+                            let display = if s.len() > 30 {
+                                format!("\"{}...\"", &s[..30])
+                            } else {
+                                format!("\"{}\"", s)
+                            };
+                            (display, NodeType::String, false)
+                        }
+                        Value::Number(n) => (n.to_string(), NodeType::Number, false),
+                        Value::Bool(b) => (b.to_string(), NodeType::Boolean, false),
+                        Value::Null => ("null".to_string(), NodeType::Null, false),
+                    };
+
+                    pairs.push(KeyValuePair {
+                        key: key.clone(),
+                        value_display,
+                        value_type,
+                        is_reference,
+                    });
+                }
+
+                (label, NodeType::Object, NodeContent::Object(pairs))
+            }
+            Value::Array(arr) => {
+                let label = format!("Array [{}]", arr.len());
+                let mut items = Vec::new();
+
+                for (index, val) in arr.iter().enumerate() {
+                    let (value_display, value_type, is_reference) = match val {
+                        Value::Object(m) => (format!("{{ {} }}", m.len()), NodeType::Object, true),
+                        Value::Array(a) => (format!("[ {} ]", a.len()), NodeType::Array, true),
+                        Value::String(s) => {
+                            let display = if s.len() > 30 {
+                                format!("\"{}...\"", &s[..30])
+                            } else {
+                                format!("\"{}\"", s)
+                            };
+                            (display, NodeType::String, false)
+                        }
+                        Value::Number(n) => (n.to_string(), NodeType::Number, false),
+                        Value::Bool(b) => (b.to_string(), NodeType::Boolean, false),
+                        Value::Null => ("null".to_string(), NodeType::Null, false),
+                    };
+
+                    items.push(ArrayItem {
+                        index,
+                        value_display,
+                        value_type,
+                        is_reference,
+                    });
+                }
+
+                (label, NodeType::Array, NodeContent::Array(items))
+            }
             Value::String(s) => {
                 let display = if s.len() > 20 {
                     format!("\"{}...\"", &s[..20])
                 } else {
                     format!("\"{}\"", s)
                 };
-                (display, NodeType::String)
+                (display.clone(), NodeType::String, NodeContent::Primitive(display))
             }
-            Value::Number(n) => (n.to_string(), NodeType::Number),
-            Value::Bool(b) => (b.to_string(), NodeType::Boolean),
-            Value::Null => ("null".to_string(), NodeType::Null),
+            Value::Number(n) => {
+                let display = n.to_string();
+                (display.clone(), NodeType::Number, NodeContent::Primitive(display))
+            }
+            Value::Bool(b) => {
+                let display = b.to_string();
+                (display.clone(), NodeType::Boolean, NodeContent::Primitive(display))
+            }
+            Value::Null => {
+                ("null".to_string(), NodeType::Null, NodeContent::Primitive("null".to_string()))
+            }
         };
 
         // Calculate position based on depth and offset
         let x = 50.0 + x_offset;
-        let y = 50.0 + depth as f32 * 80.0;
+        let y = 50.0 + depth as f32 * 100.0; // Increased vertical spacing for table nodes
+
+        // Calculate node size based on content
+        let size = self.calculate_node_size(&content);
 
         let node = GraphNode {
             id: node_id,
             label,
             node_type,
             position: Pos2::new(x, y),
-            size: Vec2::new(120.0, 40.0),
+            size,
             json_path: json_path.clone(),
+            content,
         };
 
         self.nodes.push(node);
@@ -202,6 +314,39 @@ impl JsonGraph {
         }
     }
 
+    /// Calculate node size based on content
+    fn calculate_node_size(&self, content: &NodeContent) -> Vec2 {
+        match content {
+            NodeContent::Object(pairs) => {
+                // Width: enough for key + value columns
+                let width = 250.0;
+                // Height: header + rows (20px per row) + padding
+                let row_height = 22.0;
+                let header_height = 25.0;
+                let padding = 10.0;
+                let max_visible_rows = 10; // Limit height for very large objects
+                let visible_rows = pairs.len().min(max_visible_rows);
+                let height = header_height + (visible_rows as f32 * row_height) + padding;
+                Vec2::new(width, height.max(60.0))
+            }
+            NodeContent::Array(items) => {
+                // Similar to Object but with index column
+                let width = 250.0;
+                let row_height = 22.0;
+                let header_height = 25.0;
+                let padding = 10.0;
+                let max_visible_rows = 10;
+                let visible_rows = items.len().min(max_visible_rows);
+                let height = header_height + (visible_rows as f32 * row_height) + padding;
+                Vec2::new(width, height.max(60.0))
+            }
+            NodeContent::Primitive(_) => {
+                // Small fixed size for primitive values
+                Vec2::new(120.0, 40.0)
+            }
+        }
+    }
+
     /// Get the selected node's JSON path
     pub fn get_selected_path(&self) -> Option<Vec<String>> {
         self.selected_node
@@ -257,6 +402,215 @@ impl JsonGraph {
             true
         } else {
             false
+        }
+    }
+
+    /// Render node content (table for Object/Array, text for primitives)
+    fn render_node_content(
+        &self,
+        painter: &egui::Painter,
+        node: &GraphNode,
+        rect: Rect,
+        zoom: f32,
+    ) {
+        let font_size = (11.0 * zoom).max(8.0);
+        let header_font_size = (12.0 * zoom).max(9.0);
+
+        match &node.content {
+            NodeContent::Object(pairs) => {
+                // Draw header with label
+                let header_height = 25.0 * zoom;
+                let header_rect =
+                    Rect::from_min_size(rect.min, Vec2::new(rect.width(), header_height));
+
+                painter.text(
+                    header_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    &node.label,
+                    egui::FontId::proportional(header_font_size),
+                    Color32::WHITE,
+                );
+
+                // Draw header separator
+                painter.line_segment(
+                    [
+                        Pos2::new(rect.min.x, rect.min.y + header_height),
+                        Pos2::new(rect.max.x, rect.min.y + header_height),
+                    ],
+                    Stroke::new(1.0 * zoom, Color32::from_gray(200)),
+                );
+
+                // Draw table rows
+                let row_height = 22.0 * zoom;
+                let key_column_width = rect.width() * 0.4;
+                let max_visible_rows = 10;
+
+                for (i, pair) in pairs.iter().enumerate().take(max_visible_rows) {
+                    let y = rect.min.y + header_height + (i as f32 * row_height);
+
+                    // Draw horizontal separator
+                    if i > 0 {
+                        painter.line_segment(
+                            [Pos2::new(rect.min.x + 5.0, y), Pos2::new(rect.max.x - 5.0, y)],
+                            Stroke::new(0.5 * zoom, Color32::from_gray(180)),
+                        );
+                    }
+
+                    // Draw vertical separator between columns
+                    painter.line_segment(
+                        [
+                            Pos2::new(rect.min.x + key_column_width, y),
+                            Pos2::new(rect.min.x + key_column_width, y + row_height),
+                        ],
+                        Stroke::new(0.5 * zoom, Color32::from_gray(180)),
+                    );
+
+                    // Draw key (left column)
+                    let key_rect = Rect::from_min_size(
+                        Pos2::new(rect.min.x + 5.0, y),
+                        Vec2::new(key_column_width - 10.0, row_height),
+                    );
+                    painter.text(
+                        Pos2::new(key_rect.min.x, key_rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &pair.key,
+                        egui::FontId::monospace(font_size),
+                        Color32::from_gray(240),
+                    );
+
+                    // Draw value (right column) with type-specific color
+                    let value_rect = Rect::from_min_size(
+                        Pos2::new(rect.min.x + key_column_width + 5.0, y),
+                        Vec2::new(rect.width() - key_column_width - 10.0, row_height),
+                    );
+                    let value_color = if pair.is_reference {
+                        Color32::from_rgb(150, 200, 255) // Light blue for references
+                    } else {
+                        pair.value_type.color()
+                    };
+                    painter.text(
+                        Pos2::new(value_rect.min.x, value_rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &pair.value_display,
+                        egui::FontId::monospace(font_size),
+                        value_color,
+                    );
+                }
+
+                // Show "..." if there are more rows
+                if pairs.len() > max_visible_rows {
+                    let y = rect.min.y + header_height + (max_visible_rows as f32 * row_height);
+                    painter.text(
+                        Pos2::new(rect.center().x, y),
+                        egui::Align2::CENTER_CENTER,
+                        &format!("... {} more", pairs.len() - max_visible_rows),
+                        egui::FontId::proportional(font_size),
+                        Color32::from_gray(200),
+                    );
+                }
+            }
+            NodeContent::Array(items) => {
+                // Draw header with label
+                let header_height = 25.0 * zoom;
+                let header_rect =
+                    Rect::from_min_size(rect.min, Vec2::new(rect.width(), header_height));
+
+                painter.text(
+                    header_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    &node.label,
+                    egui::FontId::proportional(header_font_size),
+                    Color32::WHITE,
+                );
+
+                // Draw header separator
+                painter.line_segment(
+                    [
+                        Pos2::new(rect.min.x, rect.min.y + header_height),
+                        Pos2::new(rect.max.x, rect.min.y + header_height),
+                    ],
+                    Stroke::new(1.0 * zoom, Color32::from_gray(200)),
+                );
+
+                // Draw table rows
+                let row_height = 22.0 * zoom;
+                let index_column_width = 40.0 * zoom;
+                let max_visible_rows = 10;
+
+                for (i, item) in items.iter().enumerate().take(max_visible_rows) {
+                    let y = rect.min.y + header_height + (i as f32 * row_height);
+
+                    // Draw horizontal separator
+                    if i > 0 {
+                        painter.line_segment(
+                            [Pos2::new(rect.min.x + 5.0, y), Pos2::new(rect.max.x - 5.0, y)],
+                            Stroke::new(0.5 * zoom, Color32::from_gray(180)),
+                        );
+                    }
+
+                    // Draw vertical separator between columns
+                    painter.line_segment(
+                        [
+                            Pos2::new(rect.min.x + index_column_width, y),
+                            Pos2::new(rect.min.x + index_column_width, y + row_height),
+                        ],
+                        Stroke::new(0.5 * zoom, Color32::from_gray(180)),
+                    );
+
+                    // Draw index (left column)
+                    let index_rect = Rect::from_min_size(
+                        Pos2::new(rect.min.x + 5.0, y),
+                        Vec2::new(index_column_width - 10.0, row_height),
+                    );
+                    painter.text(
+                        Pos2::new(index_rect.center().x, index_rect.center().y),
+                        egui::Align2::CENTER_CENTER,
+                        &format!("[{}]", item.index),
+                        egui::FontId::monospace(font_size),
+                        Color32::from_gray(200),
+                    );
+
+                    // Draw value (right column) with type-specific color
+                    let value_rect = Rect::from_min_size(
+                        Pos2::new(rect.min.x + index_column_width + 5.0, y),
+                        Vec2::new(rect.width() - index_column_width - 10.0, row_height),
+                    );
+                    let value_color = if item.is_reference {
+                        Color32::from_rgb(150, 200, 255) // Light blue for references
+                    } else {
+                        item.value_type.color()
+                    };
+                    painter.text(
+                        Pos2::new(value_rect.min.x, value_rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &item.value_display,
+                        egui::FontId::monospace(font_size),
+                        value_color,
+                    );
+                }
+
+                // Show "..." if there are more rows
+                if items.len() > max_visible_rows {
+                    let y = rect.min.y + header_height + (max_visible_rows as f32 * row_height);
+                    painter.text(
+                        Pos2::new(rect.center().x, y),
+                        egui::Align2::CENTER_CENTER,
+                        &format!("... {} more", items.len() - max_visible_rows),
+                        egui::FontId::proportional(font_size),
+                        Color32::from_gray(200),
+                    );
+                }
+            }
+            NodeContent::Primitive(value) => {
+                // Simple text rendering for primitive values
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    value,
+                    egui::FontId::proportional((12.0 * zoom).max(9.0)),
+                    Color32::WHITE,
+                );
+            }
         }
     }
 
@@ -402,14 +756,8 @@ impl JsonGraph {
                 StrokeKind::Outside,
             );
 
-            // Node label
-            painter.text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                &node.label,
-                egui::FontId::proportional(12.0 * self.zoom),
-                Color32::WHITE,
-            );
+            // Render node content based on type
+            self.render_node_content(&painter, node, rect, self.zoom);
         }
 
         // Instructions
