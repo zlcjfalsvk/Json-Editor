@@ -64,6 +64,17 @@ impl ApplicationHandler for WasmApp {
 
             let window = event_loop.create_window(window_attributes).unwrap();
 
+            // Get browser window size
+            let (width, height) = web_sys::window()
+                .and_then(|win| {
+                    let width = win.inner_width().ok()?.as_f64()? as u32;
+                    let height = win.inner_height().ok()?.as_f64()? as u32;
+                    Some((width, height))
+                })
+                .unwrap_or((800, 600)); // Fallback to default size
+
+            log::info!("Browser window size: {}x{}", width, height);
+
             // Append canvas to document body
             web_sys::window()
                 .and_then(|win| win.document())
@@ -75,8 +86,8 @@ impl ApplicationHandler for WasmApp {
                 })
                 .expect("Failed to append canvas to document");
 
-            // Set canvas size
-            let _ = window.request_inner_size(PhysicalSize::new(800, 600));
+            // Set canvas size to match browser window
+            let _ = window.request_inner_size(PhysicalSize::new(width, height));
 
             app_state.window = Some(window);
 
