@@ -128,6 +128,21 @@ pub struct RenamingKey {
     pub new_key: String,
 }
 
+/// Context menu state
+#[derive(Debug, Clone)]
+pub struct ContextMenuState {
+    /// Node ID for the context menu
+    pub node_id: usize,
+    /// Key or index for the row (None for container-level menu)
+    pub row_key: Option<String>,
+    /// Whether this is an Object (true) or Array (false)
+    pub is_object: bool,
+    /// Whether the row has a primitive value (can be edited)
+    pub is_primitive: bool,
+    /// Value type (for edit action)
+    pub value_type: Option<NodeType>,
+}
+
 /// Clicked action on a node
 #[derive(Debug, Clone)]
 pub enum ClickAction {
@@ -182,6 +197,8 @@ pub struct JsonGraph {
     adding_state: Option<AddingState>,
     /// Currently renaming a key (if any)
     renaming_key: Option<RenamingKey>,
+    /// Context menu state (if showing)
+    context_menu: Option<ContextMenuState>,
     /// Pending edit result to be processed by App
     pending_edit: Option<EditResult>,
 }
@@ -199,6 +216,7 @@ impl Default for JsonGraph {
             editing_cell: None,
             adding_state: None,
             renaming_key: None,
+            context_menu: None,
             pending_edit: None,
         }
     }
@@ -218,6 +236,7 @@ impl JsonGraph {
         self.editing_cell = None; // Cancel any ongoing edits
         self.adding_state = None; // Cancel any ongoing adds
         self.renaming_key = None; // Cancel any ongoing renames
+        self.context_menu = None; // Clear any context menu
         self.pending_edit = None; // Clear any pending edits
 
         if value.is_null() {
@@ -923,8 +942,19 @@ impl JsonGraph {
 
             let rect = Rect::from_min_size(pos, size);
 
+            // Check if node is right-clicked (for context menu)
+            if response.secondary_clicked()
+                && let Some(click_pos) = response.interact_pointer_pos()
+                && rect.contains(click_pos)
+            {
+                // Show context menu
+                if let Some(menu_info) = self.get_context_menu_info(node, rect, click_pos) {
+                    self.context_menu = Some(menu_info);
+                    self.log_to_console("Context menu opened");
+                }
+            }
             // Check if node is clicked
-            if response.clicked()
+            else if response.clicked()
                 && let Some(click_pos) = response.interact_pointer_pos()
                 && rect.contains(click_pos)
             {
@@ -1417,6 +1447,101 @@ impl JsonGraph {
             self.renaming_key = None;
         }
 
+        // Show context menu if active
+        let mut close_context_menu = false;
+
+        if let Some(menu_state) = &self.context_menu {
+            // Clone data for use after borrow ends
+            let node_id = menu_state.node_id;
+            let row_key = menu_state.row_key.clone();
+            let is_object = menu_state.is_object;
+            let is_primitive = menu_state.is_primitive;
+            let value_type = menu_state.value_type.clone();
+
+            egui::Window::new("Context Menu")
+                .collapsible(false)
+                .resizable(false)
+                .title_bar(false)
+                .fixed_pos(ui.ctx().pointer_latest_pos().unwrap_or_default())
+                .show(ui.ctx(), |ui| {
+                    ui.set_min_width(150.0);
+
+                    if let Some(key) = &row_key {
+                        // Row-level context menu
+                        if is_primitive
+                            && ui.button("✏ Edit Value").clicked()
+                        {
+                            // Trigger edit action
+                            if let Some(node) = self.nodes.iter().find(|n| n.id == node_id)
+                                && let Some(current_value) = self.get_cell_value(node, key)
+                            {
+                                self.editing_cell = Some(EditingCell {
+                                    node_id,
+                                    key: key.clone(),
+                                    text: current_value,
+                                    value_type: value_type.clone().unwrap(),
+                                });
+                            }
+                            close_context_menu = true;
+                        }
+
+                        if is_object
+                            && ui.button("✎ Rename Key").clicked()
+                        {
+                            // Trigger rename action
+                            self.renaming_key = Some(RenamingKey {
+                                node_id,
+                                old_key: key.clone(),
+                                new_key: key.clone(),
+                            });
+                            close_context_menu = true;
+                        }
+
+                        if ui.button("🗑 Delete").clicked() {
+                            // Trigger delete action
+                            if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
+                                let mut json_path = node.json_path.clone();
+                                json_path.push(key.clone());
+
+                                self.pending_edit = Some(EditResult {
+                                    json_path,
+                                    operation: ModifyOperation::Delete,
+                                });
+                                selection_changed = true;
+                            }
+                            close_context_menu = true;
+                        }
+                    } else {
+                        // Container-level context menu (add button area)
+                        let label = if is_object { "➕ Add Property" } else { "➕ Add Item" };
+                        if ui.button(label).clicked() {
+                            self.adding_state = Some(AddingState {
+                                node_id,
+                                is_object,
+                                key: String::new(),
+                                value: String::new(),
+                                value_type: NodeType::String,
+                            });
+                            close_context_menu = true;
+                        }
+                    }
+
+                    ui.separator();
+                    if ui.button("✖ Cancel").clicked() {
+                        close_context_menu = true;
+                    }
+                });
+
+            // Close menu if user clicks elsewhere
+            if ui.input(|i| i.pointer.any_click()) {
+                close_context_menu = true;
+            }
+        }
+
+        if close_context_menu {
+            self.context_menu = None;
+        }
+
         selection_changed
     }
 
@@ -1545,6 +1670,109 @@ impl JsonGraph {
             }
             NodeContent::Primitive(_) => {
                 // Primitive nodes don't have interactive elements
+                return None;
+            }
+        }
+
+        None
+    }
+
+    /// Get context menu information for a right-click position
+    /// Returns None if not clicking on a row
+    fn get_context_menu_info(&self, node: &GraphNode, rect: Rect, click_pos: Pos2) -> Option<ContextMenuState> {
+        let header_height = 25.0 * self.zoom;
+        let row_height = 22.0 * self.zoom;
+
+        // Check if click is below header
+        if click_pos.y < rect.min.y + header_height {
+            return None; // Clicking on header
+        }
+
+        // Calculate which row was clicked
+        let relative_y = click_pos.y - (rect.min.y + header_height);
+        let row_index = (relative_y / row_height).floor() as usize;
+
+        match &node.content {
+            NodeContent::Object(pairs) => {
+                let max_visible_rows = pairs.len().min(10);
+
+                // Check if clicking on "Add Property" button area
+                let bottom_y = if pairs.len() > 10 {
+                    rect.min.y + header_height + (10.0 * row_height) + row_height
+                } else {
+                    rect.min.y + header_height + (pairs.len() as f32 * row_height)
+                };
+                let add_button_height = 20.0 * self.zoom;
+                if click_pos.y >= bottom_y + 5.0
+                    && click_pos.y <= bottom_y + 5.0 + add_button_height
+                {
+                    // Context menu for adding (container level)
+                    return Some(ContextMenuState {
+                        node_id: node.id,
+                        row_key: None,
+                        is_object: true,
+                        is_primitive: false,
+                        value_type: None,
+                    });
+                }
+
+                // Check if clicking within a valid row
+                if row_index < max_visible_rows {
+                    let pair = &pairs[row_index];
+                    return Some(ContextMenuState {
+                        node_id: node.id,
+                        row_key: Some(pair.key.clone()),
+                        is_object: true,
+                        is_primitive: !pair.is_reference,
+                        value_type: if !pair.is_reference {
+                            Some(pair.value_type.clone())
+                        } else {
+                            None
+                        },
+                    });
+                }
+            }
+            NodeContent::Array(items) => {
+                let max_visible_rows = items.len().min(10);
+
+                // Check if clicking on "Add Item" button area
+                let bottom_y = if items.len() > 10 {
+                    rect.min.y + header_height + (10.0 * row_height) + row_height
+                } else {
+                    rect.min.y + header_height + (items.len() as f32 * row_height)
+                };
+                let add_button_height = 20.0 * self.zoom;
+                if click_pos.y >= bottom_y + 5.0
+                    && click_pos.y <= bottom_y + 5.0 + add_button_height
+                {
+                    // Context menu for adding (container level)
+                    return Some(ContextMenuState {
+                        node_id: node.id,
+                        row_key: None,
+                        is_object: false,
+                        is_primitive: false,
+                        value_type: None,
+                    });
+                }
+
+                // Check if clicking within a valid row
+                if row_index < max_visible_rows {
+                    let item = &items[row_index];
+                    return Some(ContextMenuState {
+                        node_id: node.id,
+                        row_key: Some(item.index.to_string()),
+                        is_object: false,
+                        is_primitive: !item.is_reference,
+                        value_type: if !item.is_reference {
+                            Some(item.value_type.clone())
+                        } else {
+                            None
+                        },
+                    });
+                }
+            }
+            NodeContent::Primitive(_) => {
+                // Primitive nodes don't have rows
                 return None;
             }
         }
