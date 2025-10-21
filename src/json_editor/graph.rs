@@ -102,6 +102,21 @@ pub struct EditingCell {
     pub value_type: NodeType,
 }
 
+/// State for adding a new property/item
+#[derive(Debug, Clone)]
+pub struct AddingState {
+    /// Node ID where we're adding
+    pub node_id: usize,
+    /// Whether this is an Object (true) or Array (false)
+    pub is_object: bool,
+    /// Key for new property (Object only)
+    pub key: String,
+    /// Value for new property/item
+    pub value: String,
+    /// Selected value type
+    pub value_type: NodeType,
+}
+
 /// Clicked action on a node
 #[derive(Debug, Clone)]
 pub enum ClickAction {
@@ -148,6 +163,8 @@ pub struct JsonGraph {
     selected_node: Option<usize>,
     /// Currently editing cell (if any)
     editing_cell: Option<EditingCell>,
+    /// Currently adding a new property/item (if any)
+    adding_state: Option<AddingState>,
     /// Pending edit result to be processed by App
     pending_edit: Option<EditResult>,
 }
@@ -163,6 +180,7 @@ impl Default for JsonGraph {
             dragging: false,
             selected_node: None,
             editing_cell: None,
+            adding_state: None,
             pending_edit: None,
         }
     }
@@ -180,6 +198,7 @@ impl JsonGraph {
         self.next_id = 0;
         self.selected_node = None;
         self.editing_cell = None; // Cancel any ongoing edits
+        self.adding_state = None; // Cancel any ongoing adds
         self.pending_edit = None; // Clear any pending edits
 
         if value.is_null() {
@@ -923,10 +942,20 @@ impl JsonGraph {
                             selection_changed = true;
                         }
                         ClickAction::AddRow => {
-                            // Handle add operation
-                            // For now, we'll show a dialog in the editing window
-                            self.log_to_console("Add row clicked");
-                            // TODO: Show add property/item dialog
+                            // Show add property/item dialog
+                            let is_object = matches!(node.content, NodeContent::Object(_));
+                            self.adding_state = Some(AddingState {
+                                node_id: node.id,
+                                is_object,
+                                key: String::new(),
+                                value: String::new(),
+                                value_type: NodeType::String, // Default to string
+                            });
+                            self.log_to_console(if is_object {
+                                "Add property dialog opened"
+                            } else {
+                                "Add item dialog opened"
+                            });
                         }
                     }
                 } else {
@@ -1093,6 +1122,182 @@ impl JsonGraph {
 
         if close_window {
             self.editing_cell = None;
+        }
+
+        // Show adding dialog if adding a new property/item
+        let mut close_add_dialog = false;
+        let mut save_add = false;
+        let mut add_data: Option<(usize, bool, String, String, NodeType)> = None;
+
+        if let Some(adding) = &mut self.adding_state {
+            egui::Window::new(if adding.is_object {
+                "Add Property"
+            } else {
+                "Add Item"
+            })
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ui.ctx(), |ui| {
+                if adding.is_object {
+                    // Object: need key and value
+                    ui.label("Property Name:");
+                    let key_response = ui.add(
+                        egui::TextEdit::singleline(&mut adding.key)
+                            .desired_width(300.0)
+                            .font(egui::TextStyle::Monospace),
+                    );
+
+                    ui.separator();
+
+                    ui.label("Value Type:");
+                    ui.horizontal(|ui| {
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::String), "String").clicked() {
+                            adding.value_type = NodeType::String;
+                        }
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::Number), "Number").clicked() {
+                            adding.value_type = NodeType::Number;
+                        }
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::Boolean), "Boolean").clicked() {
+                            adding.value_type = NodeType::Boolean;
+                        }
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::Null), "Null").clicked() {
+                            adding.value_type = NodeType::Null;
+                        }
+                    });
+
+                    ui.separator();
+
+                    ui.label("Value:");
+                    let value_response = ui.add(
+                        egui::TextEdit::singleline(&mut adding.value)
+                            .desired_width(300.0)
+                            .font(egui::TextStyle::Monospace),
+                    );
+
+                    // Auto-focus on first show
+                    if !key_response.has_focus() && !value_response.has_focus() {
+                        key_response.request_focus();
+                    }
+
+                    // Handle Enter/ESC
+                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        save_add = true;
+                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        close_add_dialog = true;
+                    }
+                } else {
+                    // Array: only need value (index is automatic)
+                    ui.label("Value Type:");
+                    ui.horizontal(|ui| {
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::String), "String").clicked() {
+                            adding.value_type = NodeType::String;
+                        }
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::Number), "Number").clicked() {
+                            adding.value_type = NodeType::Number;
+                        }
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::Boolean), "Boolean").clicked() {
+                            adding.value_type = NodeType::Boolean;
+                        }
+                        if ui.selectable_label(matches!(adding.value_type, NodeType::Null), "Null").clicked() {
+                            adding.value_type = NodeType::Null;
+                        }
+                    });
+
+                    ui.separator();
+
+                    ui.label("Value:");
+                    let value_response = ui.add(
+                        egui::TextEdit::singleline(&mut adding.value)
+                            .desired_width(300.0)
+                            .font(egui::TextStyle::Monospace),
+                    );
+
+                    // Auto-focus
+                    if !value_response.has_focus() {
+                        value_response.request_focus();
+                    }
+
+                    // Handle Enter/ESC
+                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        save_add = true;
+                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        close_add_dialog = true;
+                    }
+                }
+
+                ui.separator();
+
+                ui.horizontal(|ui| {
+                    if ui.button("Add").clicked() {
+                        save_add = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        close_add_dialog = true;
+                    }
+                });
+
+                // Show validation hint
+                match adding.value_type {
+                    NodeType::Number => {
+                        ui.label(egui::RichText::new("💡 Enter a number").small().italics());
+                    }
+                    NodeType::Boolean => {
+                        ui.label(egui::RichText::new("💡 Enter true or false").small().italics());
+                    }
+                    NodeType::Null => {
+                        ui.label(egui::RichText::new("💡 Enter null").small().italics());
+                    }
+                    _ => {}
+                }
+            });
+
+            // Extract data for later use
+            if save_add {
+                add_data = Some((
+                    adding.node_id,
+                    adding.is_object,
+                    adding.key.clone(),
+                    adding.value.clone(),
+                    adding.value_type.clone(),
+                ));
+            }
+        }
+
+        // Process add outside of the borrow
+        if let Some((node_id, is_object, key, value, value_type)) = add_data {
+            // Validate key for Object
+            if is_object && key.is_empty() {
+                self.log_to_console("Property name cannot be empty");
+            } else if let Some(validated_value) = Self::validate_value(&value, &value_type) {
+                // Find the node to get its path
+                if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
+                    let json_path = node.json_path.clone();
+
+                    // Create the add operation
+                    self.pending_edit = Some(EditResult {
+                        json_path,
+                        operation: ModifyOperation::Add {
+                            key: if is_object { key.clone() } else { String::new() },
+                            value: validated_value,
+                        },
+                    });
+
+                    self.log_to_console(&format!(
+                        "Added {} = {}",
+                        if is_object { &key } else { "item" },
+                        value
+                    ));
+                    close_add_dialog = true;
+                    selection_changed = true;
+                }
+            } else {
+                self.log_to_console("Invalid value");
+            }
+        }
+
+        if close_add_dialog {
+            self.adding_state = None;
         }
 
         selection_changed

@@ -132,8 +132,8 @@ impl App {
                                 edit_result.json_path, key, value
                             ),
                         );
-                        // TODO: Implement add operation
-                        false
+                        self.json_editor
+                            .add_value_at_path(&edit_result.json_path, key, value)
                     }
                 };
 

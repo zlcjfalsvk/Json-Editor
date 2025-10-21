@@ -456,6 +456,76 @@ impl JsonEditor {
         false
     }
 
+    /// Add a value at a specific JSON path
+    /// For Objects: key is the property name, value_str is the value
+    /// For Arrays: key is empty, value_str is appended to the array
+    /// Returns true if the add succeeded
+    pub fn add_value_at_path(&mut self, path: &[String], key: &str, value_str: &str) -> bool {
+        if let Some(mut value) = self.parsed_value.clone() {
+            if let Some(target) = Self::navigate_to_path_mut(&mut value, path) {
+                // Parse the new value based on its format
+                let new_value = if value_str.starts_with('"') && value_str.ends_with('"') {
+                    // It's a string (with quotes)
+                    serde_json::Value::String(value_str[1..value_str.len()-1].to_string())
+                } else if let Ok(num) = value_str.parse::<f64>() {
+                    // It's a number
+                    serde_json::json!(num)
+                } else if value_str == "true" {
+                    serde_json::Value::Bool(true)
+                } else if value_str == "false" {
+                    serde_json::Value::Bool(false)
+                } else if value_str == "null" {
+                    serde_json::Value::Null
+                } else {
+                    // Default to string without quotes
+                    serde_json::Value::String(value_str.to_string())
+                };
+
+                match target {
+                    Value::Object(map) => {
+                        if key.is_empty() {
+                            self.log_to_console("Property name cannot be empty");
+                            return false;
+                        }
+                        // Add new property to object
+                        map.insert(key.to_string(), new_value);
+
+                        // Update the text with pretty-printed JSON
+                        if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                            self.push_undo();
+                            self.text = pretty.clone();
+                            self.previous_text = pretty;
+                            self.parsed_value = Some(value);
+                            self.error_message = None;
+                            self.log_to_console(&format!("Added property: {} = {}", key, value_str));
+                            return true;
+                        }
+                    }
+                    Value::Array(arr) => {
+                        // Append new item to array
+                        arr.push(new_value);
+
+                        // Update the text with pretty-printed JSON
+                        if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                            self.push_undo();
+                            self.text = pretty.clone();
+                            self.previous_text = pretty;
+                            self.parsed_value = Some(value);
+                            self.error_message = None;
+                            self.log_to_console(&format!("Added array item: {}", value_str));
+                            return true;
+                        }
+                    }
+                    _ => {
+                        self.log_to_console("Cannot add to non-Object/Array value");
+                        return false;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     /// Render JSON tree view recursively
     #[allow(clippy::only_used_in_recursion)]
     fn render_tree_view(&self, ui: &mut egui::Ui, value: &Value, key: Option<&str>, path: String) {
