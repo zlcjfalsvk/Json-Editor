@@ -15,6 +15,8 @@ pub struct GraphNode {
     pub position: Pos2,
     /// Size of the node
     pub size: Vec2,
+    /// JSON path to this node (e.g., ["items", "0", "value"])
+    pub json_path: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +61,8 @@ pub struct JsonGraph {
     offset: Vec2,
     /// Whether the graph is being dragged
     dragging: bool,
+    /// Selected node ID
+    selected_node: Option<usize>,
 }
 
 impl Default for JsonGraph {
@@ -70,6 +74,7 @@ impl Default for JsonGraph {
             zoom: 1.0,
             offset: Vec2::ZERO,
             dragging: false,
+            selected_node: None,
         }
     }
 }
@@ -84,12 +89,13 @@ impl JsonGraph {
         self.nodes.clear();
         self.edges.clear();
         self.next_id = 0;
+        self.selected_node = None;
 
         if value.is_null() {
             return;
         }
 
-        self.build_node(value, None, None, 0, 0.0);
+        self.build_node(value, None, None, 0, 0.0, Vec::new());
         self.log_to_console(&format!("Built graph with {} nodes", self.nodes.len()));
     }
 
@@ -102,6 +108,7 @@ impl JsonGraph {
         edge_label: Option<String>,
         depth: usize,
         x_offset: f32,
+        json_path: Vec<String>,
     ) -> f32 {
         let node_id = self.next_id;
         self.next_id += 1;
@@ -132,6 +139,7 @@ impl JsonGraph {
             node_type,
             position: Pos2::new(x, y),
             size: Vec2::new(120.0, 40.0),
+            json_path: json_path.clone(),
         };
 
         self.nodes.push(node);
@@ -152,12 +160,15 @@ impl JsonGraph {
         match value {
             Value::Object(map) => {
                 for (key, child_value) in map {
+                    let mut child_path = json_path.clone();
+                    child_path.push(key.clone());
                     let child_width = self.build_node(
                         child_value,
                         Some(node_id),
                         Some(key.clone()),
                         depth + 1,
                         child_offset,
+                        child_path,
                     );
                     child_offset += child_width;
                     total_width += child_width;
@@ -165,12 +176,15 @@ impl JsonGraph {
             }
             Value::Array(arr) => {
                 for (idx, child_value) in arr.iter().enumerate() {
+                    let mut child_path = json_path.clone();
+                    child_path.push(idx.to_string());
                     let child_width = self.build_node(
                         child_value,
                         Some(node_id),
                         Some(format!("[{}]", idx)),
                         depth + 1,
                         child_offset,
+                        child_path,
                     );
                     child_offset += child_width;
                     total_width += child_width;
@@ -188,8 +202,22 @@ impl JsonGraph {
         }
     }
 
+    /// Get the selected node's JSON path
+    pub fn get_selected_path(&self) -> Option<Vec<String>> {
+        self.selected_node
+            .and_then(|id| self.nodes.iter().find(|n| n.id == id))
+            .map(|node| node.json_path.clone())
+    }
+
+    /// Clear selection
+    pub fn clear_selection(&mut self) {
+        self.selected_node = None;
+    }
+
     /// Render the graph using egui
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut selection_changed = false;
+
         ui.heading("JSON Graph Visualization");
 
         // Controls
@@ -201,6 +229,12 @@ impl JsonGraph {
                 self.zoom = 1.0;
                 self.offset = Vec2::ZERO;
                 self.log_to_console("Reset view");
+            }
+
+            if ui.button("Clear Selection").clicked() {
+                self.clear_selection();
+                selection_changed = true;
+                self.log_to_console("Selection cleared");
             }
 
             ui.separator();
@@ -271,19 +305,54 @@ impl JsonGraph {
             }
         }
 
-        // Draw nodes
+        // Draw nodes and handle clicks
         for node in &self.nodes {
             let pos = self.transform_pos(node.position, canvas_rect);
             let size = node.size * self.zoom;
 
             let rect = Rect::from_min_size(pos, size);
 
-            // Node background
-            painter.rect_filled(rect, 5.0, node.node_type.color());
+            // Check if node is clicked
+            if response.clicked()
+                && let Some(click_pos) = response.interact_pointer_pos()
+                && rect.contains(click_pos)
+            {
+                self.selected_node = Some(node.id);
+                selection_changed = true;
+                self.log_to_console(&format!(
+                    "Selected node: {} (path: {:?})",
+                    node.label, node.json_path
+                ));
+            }
+
+            // Check if this node is selected
+            let is_selected = self.selected_node == Some(node.id);
+
+            // Node background (highlight if selected)
+            let bg_color = if is_selected {
+                // Brighter version for selected node
+                let base = node.node_type.color();
+                Color32::from_rgb(
+                    base.r().saturating_add(50),
+                    base.g().saturating_add(50),
+                    base.b().saturating_add(50),
+                )
+            } else {
+                node.node_type.color()
+            };
+
+            painter.rect_filled(rect, 5.0, bg_color);
             painter.rect_stroke(
                 rect,
                 5.0,
-                Stroke::new(2.0, Color32::BLACK),
+                Stroke::new(
+                    if is_selected { 3.0 } else { 2.0 },
+                    if is_selected {
+                        Color32::YELLOW
+                    } else {
+                        Color32::BLACK
+                    },
+                ),
                 StrokeKind::Outside,
             );
 
@@ -307,6 +376,8 @@ impl JsonGraph {
                 Color32::GRAY,
             );
         }
+
+        selection_changed
     }
 
     /// Transform position with zoom and offset

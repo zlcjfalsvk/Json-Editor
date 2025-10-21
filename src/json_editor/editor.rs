@@ -25,6 +25,8 @@ pub struct JsonEditor {
     show_line_numbers: bool,
     /// Target line to scroll to (None if no scroll needed)
     target_line: Option<usize>,
+    /// Line to highlight (None if no highlight)
+    highlight_line: Option<usize>,
 }
 
 impl Default for JsonEditor {
@@ -56,6 +58,7 @@ impl Default for JsonEditor {
             max_history: 100,
             show_line_numbers: true,
             target_line: None,
+            highlight_line: None,
         }
     }
 }
@@ -80,6 +83,7 @@ impl JsonEditor {
             max_history: 100,
             show_line_numbers: true,
             target_line: None,
+            highlight_line: None,
         };
         editor.validate();
         editor
@@ -145,10 +149,55 @@ impl JsonEditor {
         !self.redo_stack.is_empty()
     }
 
-    /// Scroll to specific line
+    /// Scroll to specific line and optionally highlight it
     pub fn scroll_to_line(&mut self, line: usize) {
         self.target_line = Some(line);
-        self.log_to_console(&format!("Scroll to line {}", line));
+        self.highlight_line = Some(line);
+        self.log_to_console(&format!("Scroll to and highlight line {}", line));
+    }
+
+    /// Find line number for a JSON path
+    /// Returns the line number (1-indexed) where the path can be found
+    pub fn find_line_for_path(&self, path: &[String]) -> Option<usize> {
+        if path.is_empty() {
+            return Some(1); // Root is at line 1
+        }
+
+        let lines: Vec<&str> = self.text.lines().collect();
+        let mut current_line = 0;
+        let mut path_index = 0;
+
+        for (line_num, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+
+            // Check if this line contains the current path segment
+            if path_index < path.len() {
+                let segment = &path[path_index];
+
+                // For object keys
+                if trimmed.contains(&format!("\"{}\"", segment)) {
+                    current_line = line_num + 1; // 1-indexed
+                    path_index += 1;
+
+                    // If we've found all path segments, return this line
+                    if path_index == path.len() {
+                        return Some(current_line);
+                    }
+                }
+            }
+        }
+
+        // If we didn't find the exact path, return the last matched line
+        if current_line > 0 {
+            Some(current_line)
+        } else {
+            None
+        }
+    }
+
+    /// Set or clear line highlight
+    pub fn set_highlight_line(&mut self, line: Option<usize>) {
+        self.highlight_line = line;
     }
 
     /// Toggle line numbers
@@ -372,10 +421,15 @@ impl JsonEditor {
                                         egui::vec2(line_number_width, line_height),
                                         egui::Layout::top_down(egui::Align::Max),
                                         |ui| {
-                                            ui.colored_label(
-                                                egui::Color32::from_gray(128),
-                                                format!("{:>4}", i),
-                                            );
+                                            // Highlight the selected line
+                                            let is_highlighted = self.highlight_line == Some(i);
+                                            let color = if is_highlighted {
+                                                egui::Color32::from_rgb(255, 200, 0) // Yellow highlight
+                                            } else {
+                                                egui::Color32::from_gray(128)
+                                            };
+
+                                            ui.colored_label(color, format!("{:>4}", i));
                                         },
                                     );
                                 }

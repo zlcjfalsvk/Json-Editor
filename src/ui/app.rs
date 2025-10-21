@@ -108,7 +108,23 @@ impl App {
                 self.graph_initialized = true;
             }
 
-            self.json_graph.ui(ui);
+            let selection_changed = self.json_graph.ui(ui);
+
+            // Sync graph selection to editor if enabled
+            if selection_changed && self.sync_graph_to_editor {
+                if let Some(path) = self.json_graph.get_selected_path() {
+                    if let Some(line) = self.json_editor.find_line_for_path(&path) {
+                        self.json_editor.scroll_to_line(line);
+                        utils::log(
+                            "App",
+                            &format!("Synced to editor: line {} (path: {:?})", line, path),
+                        );
+                    }
+                } else {
+                    // Selection cleared, clear highlight
+                    self.json_editor.set_highlight_line(None);
+                }
+            }
         });
     }
 }
