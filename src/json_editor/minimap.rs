@@ -81,12 +81,8 @@ impl Minimap {
         let scale = scale_x.min(scale_y).min(0.5); // Cap at 0.5 for readability
 
         // Draw minimap background
-        let bg_color = Color32::from_rgba_unmultiplied(
-            30,
-            30,
-            30,
-            (255.0 * self.background_opacity) as u8,
-        );
+        let bg_color =
+            Color32::from_rgba_unmultiplied(30, 30, 30, (255.0 * self.background_opacity) as u8);
         painter.rect_filled(minimap_rect, 3.0, bg_color);
         painter.rect_stroke(
             minimap_rect,
@@ -103,12 +99,8 @@ impl Minimap {
         );
 
         for node in nodes {
-            let node_pos_in_minimap = self.world_to_minimap(
-                node.position,
-                minimap_rect,
-                min_bounds,
-                scale,
-            );
+            let node_pos_in_minimap =
+                self.world_to_minimap(node.position, minimap_rect, min_bounds, scale);
             let node_size_in_minimap = node.size * scale;
 
             // Draw node as a small rectangle
