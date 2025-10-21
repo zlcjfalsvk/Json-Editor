@@ -141,6 +141,8 @@ pub struct ContextMenuState {
     pub is_primitive: bool,
     /// Value type (for edit action)
     pub value_type: Option<NodeType>,
+    /// Position where the menu was opened (fixed position)
+    pub position: Pos2,
 }
 
 /// Clicked action on a node
@@ -948,7 +950,8 @@ impl JsonGraph {
                 && rect.contains(click_pos)
             {
                 // Show context menu
-                if let Some(menu_info) = self.get_context_menu_info(node, rect, click_pos) {
+                if let Some(mut menu_info) = self.get_context_menu_info(node, rect, click_pos) {
+                    menu_info.position = click_pos; // Save the click position
                     self.context_menu = Some(menu_info);
                     self.log_to_console("Context menu opened");
                 }
@@ -1457,14 +1460,15 @@ impl JsonGraph {
             let is_object = menu_state.is_object;
             let is_primitive = menu_state.is_primitive;
             let value_type = menu_state.value_type.clone();
+            let menu_position = menu_state.position;
 
-            egui::Window::new("Context Menu")
-                .collapsible(false)
-                .resizable(false)
-                .title_bar(false)
-                .fixed_pos(ui.ctx().pointer_latest_pos().unwrap_or_default())
+            egui::Area::new(egui::Id::new("context_menu"))
+                .fixed_pos(menu_position) // Use the saved position
+                .order(egui::Order::Foreground)
                 .show(ui.ctx(), |ui| {
-                    ui.set_min_width(150.0);
+                    egui::Frame::popup(ui.style())
+                        .show(ui, |ui| {
+                            ui.set_min_width(150.0);
 
                     if let Some(key) = &row_key {
                         // Row-level context menu
@@ -1530,7 +1534,8 @@ impl JsonGraph {
                     if ui.button("✖ Cancel").clicked() {
                         close_context_menu = true;
                     }
-                });
+                        }); // Close Frame::popup
+                }); // Close Area
         }
 
         if close_context_menu {
@@ -1713,6 +1718,7 @@ impl JsonGraph {
                         is_object: true,
                         is_primitive: false,
                         value_type: None,
+                        position: Pos2::ZERO, // Will be set by caller
                     });
                 }
 
@@ -1729,6 +1735,7 @@ impl JsonGraph {
                         } else {
                             None
                         },
+                        position: Pos2::ZERO, // Will be set by caller
                     });
                 }
             }
@@ -1752,6 +1759,7 @@ impl JsonGraph {
                         is_object: false,
                         is_primitive: false,
                         value_type: None,
+                        position: Pos2::ZERO, // Will be set by caller
                     });
                 }
 
@@ -1768,6 +1776,7 @@ impl JsonGraph {
                         } else {
                             None
                         },
+                        position: Pos2::ZERO, // Will be set by caller
                     });
                 }
             }
