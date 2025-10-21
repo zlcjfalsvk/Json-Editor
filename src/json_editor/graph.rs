@@ -238,8 +238,8 @@ impl JsonGraph {
         };
 
         // Calculate position based on depth and offset
-        let x = 50.0 + x_offset;
-        let y = 50.0 + depth as f32 * 100.0; // Increased vertical spacing for table nodes
+        let x = 100.0 + x_offset; // Increased left margin
+        let y = 50.0 + depth as f32 * 200.0; // Increased vertical spacing significantly
 
         // Calculate node size based on content
         let size = self.calculate_node_size(&content);
@@ -266,40 +266,49 @@ impl JsonGraph {
         }
 
         // Process children and calculate total width
+        // Only create child nodes for Object and Array values (not primitives)
         let mut child_offset = x_offset;
         let mut total_width = 0.0;
 
         match value {
             Value::Object(map) => {
                 for (key, child_value) in map {
-                    let mut child_path = json_path.clone();
-                    child_path.push(key.clone());
-                    let child_width = self.build_node(
-                        child_value,
-                        Some(node_id),
-                        Some(key.clone()),
-                        depth + 1,
-                        child_offset,
-                        child_path,
-                    );
-                    child_offset += child_width;
-                    total_width += child_width;
+                    // Only create child nodes for Object and Array types
+                    if child_value.is_object() || child_value.is_array() {
+                        let mut child_path = json_path.clone();
+                        child_path.push(key.clone());
+                        let child_width = self.build_node(
+                            child_value,
+                            Some(node_id),
+                            Some(key.clone()),
+                            depth + 1,
+                            child_offset,
+                            child_path,
+                        );
+                        child_offset += child_width;
+                        total_width += child_width;
+                    }
+                    // Primitive values are already displayed in the table
                 }
             }
             Value::Array(arr) => {
                 for (idx, child_value) in arr.iter().enumerate() {
-                    let mut child_path = json_path.clone();
-                    child_path.push(idx.to_string());
-                    let child_width = self.build_node(
-                        child_value,
-                        Some(node_id),
-                        Some(format!("[{}]", idx)),
-                        depth + 1,
-                        child_offset,
-                        child_path,
-                    );
-                    child_offset += child_width;
-                    total_width += child_width;
+                    // Only create child nodes for Object and Array types
+                    if child_value.is_object() || child_value.is_array() {
+                        let mut child_path = json_path.clone();
+                        child_path.push(idx.to_string());
+                        let child_width = self.build_node(
+                            child_value,
+                            Some(node_id),
+                            Some(format!("[{}]", idx)),
+                            depth + 1,
+                            child_offset,
+                            child_path,
+                        );
+                        child_offset += child_width;
+                        total_width += child_width;
+                    }
+                    // Primitive values are already displayed in the table
                 }
             }
             _ => {}
@@ -310,7 +319,7 @@ impl JsonGraph {
         if total_width > 0.0 {
             total_width
         } else {
-            150.0 // Base width for leaf nodes
+            300.0 // Base width for leaf nodes (increased for better spacing)
         }
     }
 
@@ -804,8 +813,18 @@ mod tests {
         let json = json!({"key": "value"});
         graph.build_from_json(&json);
 
-        assert!(!graph.nodes.is_empty());
-        assert_eq!(graph.edges.len(), 1); // One edge from object to value
+        // Only 1 node: the root object (primitive values shown in table)
+        assert_eq!(graph.nodes.len(), 1);
+        assert_eq!(graph.edges.len(), 0); // No edges since no child nodes
+
+        // Check that the object has the key in its content
+        if let NodeContent::Object(pairs) = &graph.nodes[0].content {
+            assert_eq!(pairs.len(), 1);
+            assert_eq!(pairs[0].key, "key");
+            assert_eq!(pairs[0].value_display, "\"value\"");
+        } else {
+            panic!("Expected Object content");
+        }
     }
 
     #[test]
@@ -814,8 +833,19 @@ mod tests {
         let json = json!([1, 2, 3]);
         graph.build_from_json(&json);
 
-        assert_eq!(graph.nodes.len(), 4); // Array node + 3 number nodes
-        assert_eq!(graph.edges.len(), 3); // 3 edges from array to numbers
+        // Only 1 node: the array (primitive values shown in table)
+        assert_eq!(graph.nodes.len(), 1);
+        assert_eq!(graph.edges.len(), 0); // No edges since no child nodes
+
+        // Check that the array has 3 items in its content
+        if let NodeContent::Array(items) = &graph.nodes[0].content {
+            assert_eq!(items.len(), 3);
+            assert_eq!(items[0].value_display, "1");
+            assert_eq!(items[1].value_display, "2");
+            assert_eq!(items[2].value_display, "3");
+        } else {
+            panic!("Expected Array content");
+        }
     }
 
     #[test]
@@ -829,7 +859,19 @@ mod tests {
         });
         graph.build_from_json(&json);
 
-        assert!(graph.nodes.len() >= 4); // Root object + user object + name + age
+        // 2 nodes: root object + user object (name and age are shown in user's table)
+        assert_eq!(graph.nodes.len(), 2);
+        assert_eq!(graph.edges.len(), 1); // One edge from root to user
+
+        // Check that user object has name and age in its content
+        // Find the second object node (id > 0)
+        let user_node = graph.nodes.iter().find(|n| n.id > 0 && n.label.contains("Object"));
+        assert!(user_node.is_some());
+        if let NodeContent::Object(pairs) = &user_node.unwrap().content {
+            assert_eq!(pairs.len(), 2);
+            assert!(pairs.iter().any(|p| p.key == "name"));
+            assert!(pairs.iter().any(|p| p.key == "age"));
+        }
     }
 
     #[test]
@@ -879,30 +921,44 @@ mod tests {
             );
         }
 
-        // Expected: 10 nodes
-        // 0: Object (3) - root
-        // 1: "example" - name
-        // 2: "1.0.0" - version
-        // 3: Array [2] - items
-        // 4: Object (2) - items[0]
-        // 5: 1 - items[0].id
-        // 6: "first" - items[0].value
-        // 7: Object (2) - items[1]
-        // 8: 2 - items[1].id
-        // 9: "second" - items[1].value
+        // Expected: 4 nodes (only Objects and Arrays, not primitives)
+        // 0: Object (3) - root (name, version shown in table)
+        // 1: Array [2] - items
+        // 2: Object (2) - items[0] (id, value shown in table)
+        // 3: Object (2) - items[1] (id, value shown in table)
 
         assert_eq!(
             graph.nodes.len(),
-            10,
-            "Expected 10 nodes for default_json structure"
+            4,
+            "Expected 4 nodes for default_json structure"
         );
 
-        // Check that "first" value node exists
-        let has_first = graph.nodes.iter().any(|n| n.label.contains("first"));
-        assert!(has_first, "Should have a node with 'first' value");
+        // Check that root object has name and version in its content
+        let root_node = &graph.nodes[0];
+        if let NodeContent::Object(pairs) = &root_node.content {
+            assert_eq!(pairs.len(), 3); // name, version, items
+            assert!(pairs.iter().any(|p| p.key == "name"));
+            assert!(pairs.iter().any(|p| p.key == "version"));
+        }
 
-        // Check that "second" value node exists
-        let has_second = graph.nodes.iter().any(|n| n.label.contains("second"));
-        assert!(has_second, "Should have a node with 'second' value");
+        // Check that items array has 2 objects as child nodes
+        let items_node = graph.nodes.iter().find(|n| n.label.contains("Array"));
+        assert!(items_node.is_some());
+
+        // Check that item objects have id and value in their content
+        let item_objects: Vec<_> = graph
+            .nodes
+            .iter()
+            .filter(|n| n.label.contains("Object") && n.id > 0)
+            .collect();
+        assert_eq!(item_objects.len(), 2);
+
+        for item in item_objects {
+            if let NodeContent::Object(pairs) = &item.content {
+                assert_eq!(pairs.len(), 2); // id and value
+                assert!(pairs.iter().any(|p| p.key == "id"));
+                assert!(pairs.iter().any(|p| p.key == "value"));
+            }
+        }
     }
 }
