@@ -1,6 +1,7 @@
 use crate::utils;
 use egui::{Color32, Pos2, Rect, Stroke, StrokeKind, Vec2};
 use serde_json::Value;
+use unicode_normalization::UnicodeNormalization;
 
 use super::minimap::Minimap;
 
@@ -1111,6 +1112,11 @@ impl JsonGraph {
 
                     let response = ui.add(text_edit);
 
+                    // Apply Unicode NFC normalization for Korean input
+                    if response.changed() {
+                        editing.text = editing.text.nfc().collect();
+                    }
+
                     // Auto-focus on first show
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         save_edit = true;
@@ -1218,6 +1224,11 @@ impl JsonGraph {
                             .font(egui::TextStyle::Monospace),
                     );
 
+                    // Apply Unicode NFC normalization for Korean input
+                    if key_response.changed() {
+                        adding.key = adding.key.nfc().collect();
+                    }
+
                     ui.separator();
 
                     ui.label("Value Type:");
@@ -1265,6 +1276,11 @@ impl JsonGraph {
                             .desired_width(300.0)
                             .font(egui::TextStyle::Monospace),
                     );
+
+                    // Apply Unicode NFC normalization for Korean input
+                    if value_response.changed() {
+                        adding.value = adding.value.nfc().collect();
+                    }
 
                     // Auto-focus on first show
                     if !key_response.has_focus() && !value_response.has_focus() {
@@ -1324,6 +1340,11 @@ impl JsonGraph {
                             .desired_width(300.0)
                             .font(egui::TextStyle::Monospace),
                     );
+
+                    // Apply Unicode NFC normalization for Korean input
+                    if value_response.changed() {
+                        adding.value = adding.value.nfc().collect();
+                    }
 
                     // Auto-focus
                     if !value_response.has_focus() {
@@ -1444,6 +1465,11 @@ impl JsonGraph {
                             .desired_width(300.0)
                             .font(egui::TextStyle::Monospace),
                     );
+
+                    // Apply Unicode NFC normalization for Korean input
+                    if key_response.changed() {
+                        renaming.new_key = renaming.new_key.nfc().collect();
+                    }
 
                     // Auto-focus on first show
                     if !key_response.has_focus() {

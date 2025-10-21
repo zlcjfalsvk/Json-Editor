@@ -1,5 +1,6 @@
 use crate::utils;
 use serde_json::Value;
+use unicode_normalization::UnicodeNormalization;
 
 /// View mode for JSON editor
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -896,6 +897,9 @@ impl JsonEditor {
                 let response = ui.add(text_edit);
 
                 if response.changed() {
+                    // Apply Unicode NFC normalization for Korean input
+                    self.text = self.text.nfc().collect();
+
                     // Push previous text to undo stack for per-character undo
                     if self.text != self.previous_text {
                         self.undo_stack.push(self.previous_text.clone());
