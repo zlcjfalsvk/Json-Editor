@@ -344,6 +344,238 @@ impl JsonEditor {
         self.log_to_console(&format!("View mode: {:?}", self.view_mode));
     }
 
+    /// Update a value at a specific JSON path
+    /// Returns true if the update succeeded
+    pub fn update_value_at_path(&mut self, path: &[String], new_value_str: &str) -> bool {
+        if let Some(mut value) = self.parsed_value.clone() {
+            // Navigate to the target location
+            if let Some(target) = Self::navigate_to_path_mut(&mut value, path) {
+                // Parse the new value based on its format
+                let new_value = if new_value_str.starts_with('"') && new_value_str.ends_with('"') {
+                    // It's a string (with quotes)
+                    serde_json::Value::String(new_value_str[1..new_value_str.len() - 1].to_string())
+                } else if let Ok(num) = new_value_str.parse::<f64>() {
+                    // It's a number
+                    serde_json::json!(num)
+                } else if new_value_str == "true" {
+                    serde_json::Value::Bool(true)
+                } else if new_value_str == "false" {
+                    serde_json::Value::Bool(false)
+                } else if new_value_str == "null" {
+                    serde_json::Value::Null
+                } else {
+                    // Default to string without quotes
+                    serde_json::Value::String(new_value_str.to_string())
+                };
+
+                *target = new_value;
+
+                // Update the text with pretty-printed JSON
+                if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                    self.push_undo();
+                    self.text = pretty.clone();
+                    self.previous_text = pretty;
+                    self.parsed_value = Some(value);
+                    self.error_message = None;
+                    self.log_to_console(&format!("Updated value at path: {:?}", path));
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Navigate to a mutable reference at a JSON path
+    fn navigate_to_path_mut<'a>(value: &'a mut Value, path: &[String]) -> Option<&'a mut Value> {
+        let mut current = value;
+
+        for segment in path {
+            current = match current {
+                Value::Object(map) => map.get_mut(segment)?,
+                Value::Array(arr) => {
+                    let index: usize = segment.parse().ok()?;
+                    arr.get_mut(index)?
+                }
+                _ => return None,
+            };
+        }
+
+        Some(current)
+    }
+
+    /// Delete a value at a specific JSON path
+    /// Returns true if the delete succeeded
+    pub fn delete_value_at_path(&mut self, path: &[String]) -> bool {
+        if path.is_empty() {
+            return false;
+        }
+
+        if let Some(mut value) = self.parsed_value.clone() {
+            let parent_path = &path[..path.len() - 1];
+            let key = &path[path.len() - 1];
+
+            if let Some(parent) = Self::navigate_to_path_mut(&mut value, parent_path) {
+                match parent {
+                    Value::Object(map) => {
+                        if map.remove(key).is_some() {
+                            // Update the text with pretty-printed JSON
+                            if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                                self.push_undo();
+                                self.text = pretty.clone();
+                                self.previous_text = pretty;
+                                self.parsed_value = Some(value);
+                                self.error_message = None;
+                                self.log_to_console(&format!("Deleted property: {}", key));
+                                return true;
+                            }
+                        }
+                    }
+                    Value::Array(arr) => {
+                        if let Ok(index) = key.parse::<usize>()
+                            && index < arr.len()
+                        {
+                            arr.remove(index);
+                            // Update the text with pretty-printed JSON
+                            if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                                self.push_undo();
+                                self.text = pretty.clone();
+                                self.previous_text = pretty;
+                                self.parsed_value = Some(value);
+                                self.error_message = None;
+                                self.log_to_console(&format!(
+                                    "Deleted array item at index: {}",
+                                    index
+                                ));
+                                return true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        false
+    }
+
+    /// Add a value at a specific JSON path
+    /// For Objects: key is the property name, value_str is the value
+    /// For Arrays: key is empty, value_str is appended to the array
+    /// Returns true if the add succeeded
+    pub fn add_value_at_path(&mut self, path: &[String], key: &str, value_str: &str) -> bool {
+        if let Some(mut value) = self.parsed_value.clone()
+            && let Some(target) = Self::navigate_to_path_mut(&mut value, path)
+        {
+            // Parse the new value based on its format
+            let new_value = if value_str.starts_with('"') && value_str.ends_with('"') {
+                // It's a string (with quotes)
+                serde_json::Value::String(value_str[1..value_str.len() - 1].to_string())
+            } else if let Ok(num) = value_str.parse::<f64>() {
+                // It's a number
+                serde_json::json!(num)
+            } else if value_str == "true" {
+                serde_json::Value::Bool(true)
+            } else if value_str == "false" {
+                serde_json::Value::Bool(false)
+            } else if value_str == "null" {
+                serde_json::Value::Null
+            } else {
+                // Default to string without quotes
+                serde_json::Value::String(value_str.to_string())
+            };
+
+            match target {
+                Value::Object(map) => {
+                    if key.is_empty() {
+                        self.log_to_console("Property name cannot be empty");
+                        return false;
+                    }
+                    // Add new property to object
+                    map.insert(key.to_string(), new_value);
+
+                    // Update the text with pretty-printed JSON
+                    if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                        self.push_undo();
+                        self.text = pretty.clone();
+                        self.previous_text = pretty;
+                        self.parsed_value = Some(value);
+                        self.error_message = None;
+                        self.log_to_console(&format!("Added property: {} = {}", key, value_str));
+                        return true;
+                    }
+                }
+                Value::Array(arr) => {
+                    // Append new item to array
+                    arr.push(new_value);
+
+                    // Update the text with pretty-printed JSON
+                    if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                        self.push_undo();
+                        self.text = pretty.clone();
+                        self.previous_text = pretty;
+                        self.parsed_value = Some(value);
+                        self.error_message = None;
+                        self.log_to_console(&format!("Added array item: {}", value_str));
+                        return true;
+                    }
+                }
+                _ => {
+                    self.log_to_console("Cannot add to non-Object/Array value");
+                    return false;
+                }
+            }
+        }
+        false
+    }
+
+    /// Rename a property key in an Object
+    /// Path points to the Object containing the key to rename
+    /// Returns true if the rename succeeded
+    pub fn rename_key_at_path(&mut self, path: &[String], old_key: &str, new_key: &str) -> bool {
+        if let Some(mut value) = self.parsed_value.clone()
+            && let Some(target) = Self::navigate_to_path_mut(&mut value, path)
+        {
+            match target {
+                Value::Object(map) => {
+                    // Check if old key exists
+                    if !map.contains_key(old_key) {
+                        self.log_to_console(&format!("Property '{}' not found", old_key));
+                        return false;
+                    }
+
+                    // Check if new key already exists
+                    if map.contains_key(new_key) && old_key != new_key {
+                        self.log_to_console(&format!("Property '{}' already exists", new_key));
+                        return false;
+                    }
+
+                    // Remove old key and insert with new key
+                    if let Some(old_value) = map.remove(old_key) {
+                        map.insert(new_key.to_string(), old_value);
+
+                        // Update the text with pretty-printed JSON
+                        if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                            self.push_undo();
+                            self.text = pretty.clone();
+                            self.previous_text = pretty;
+                            self.parsed_value = Some(value);
+                            self.error_message = None;
+                            self.log_to_console(&format!(
+                                "Renamed property: {} -> {}",
+                                old_key, new_key
+                            ));
+                            return true;
+                        }
+                    }
+                }
+                _ => {
+                    self.log_to_console("Cannot rename key in non-Object value");
+                    return false;
+                }
+            }
+        }
+        false
+    }
+
     /// Render JSON tree view recursively
     #[allow(clippy::only_used_in_recursion)]
     fn render_tree_view(&self, ui: &mut egui::Ui, value: &Value, key: Option<&str>, path: String) {

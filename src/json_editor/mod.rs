@@ -5,4 +5,4 @@ pub mod editor;
 pub mod graph;
 
 pub use editor::JsonEditor;
-pub use graph::JsonGraph;
+pub use graph::{JsonGraph, ModifyOperation};

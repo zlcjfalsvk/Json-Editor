@@ -101,6 +101,71 @@ impl App {
 
             let selection_changed = self.json_graph.ui(ui);
 
+            // Check if there's a pending edit from the graph
+            if let Some(edit_result) = self.json_graph.take_pending_edit() {
+                use crate::json_editor::graph::ModifyOperation;
+
+                let success = match edit_result.operation {
+                    ModifyOperation::Update { ref new_value } => {
+                        utils::log(
+                            "App",
+                            &format!(
+                                "Processing graph update: {:?} = {}",
+                                edit_result.json_path, new_value
+                            ),
+                        );
+                        self.json_editor
+                            .update_value_at_path(&edit_result.json_path, new_value)
+                    }
+                    ModifyOperation::Delete => {
+                        utils::log(
+                            "App",
+                            &format!("Processing graph delete: {:?}", edit_result.json_path),
+                        );
+                        self.json_editor
+                            .delete_value_at_path(&edit_result.json_path)
+                    }
+                    ModifyOperation::Add { ref key, ref value } => {
+                        utils::log(
+                            "App",
+                            &format!(
+                                "Processing graph add: {:?} + {} = {}",
+                                edit_result.json_path, key, value
+                            ),
+                        );
+                        self.json_editor
+                            .add_value_at_path(&edit_result.json_path, key, value)
+                    }
+                    ModifyOperation::Rename {
+                        ref old_key,
+                        ref new_key,
+                    } => {
+                        utils::log(
+                            "App",
+                            &format!(
+                                "Processing graph rename: {:?} {} -> {}",
+                                edit_result.json_path, old_key, new_key
+                            ),
+                        );
+                        self.json_editor.rename_key_at_path(
+                            &edit_result.json_path,
+                            old_key,
+                            new_key,
+                        )
+                    }
+                };
+
+                if success {
+                    // Rebuild graph from updated JSON
+                    if let Some(value) = self.json_editor.parsed_value() {
+                        self.json_graph.build_from_json(value);
+                        utils::log("App", "Graph rebuilt after modification");
+                    }
+                } else {
+                    utils::log("App", "Failed to apply modification from graph");
+                }
+            }
+
             // Sync graph selection to editor
             if selection_changed
                 && let Some(path) = self.json_graph.get_selected_path()
