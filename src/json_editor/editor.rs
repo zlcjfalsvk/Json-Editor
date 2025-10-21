@@ -25,8 +25,6 @@ pub struct JsonEditor {
     show_line_numbers: bool,
     /// Target line to scroll to (None if no scroll needed)
     target_line: Option<usize>,
-    /// Line to highlight (None if no highlight)
-    highlight_line: Option<usize>,
     /// Clicked line number (for editor-to-graph sync)
     clicked_line: Option<usize>,
 }
@@ -60,7 +58,6 @@ impl Default for JsonEditor {
             max_history: 100,
             show_line_numbers: true,
             target_line: None,
-            highlight_line: None,
             clicked_line: None,
         }
     }
@@ -86,7 +83,6 @@ impl JsonEditor {
             max_history: 100,
             show_line_numbers: true,
             target_line: None,
-            highlight_line: None,
             clicked_line: None,
         };
         editor.validate();
@@ -153,11 +149,10 @@ impl JsonEditor {
         !self.redo_stack.is_empty()
     }
 
-    /// Scroll to specific line and optionally highlight it
+    /// Scroll to specific line
     pub fn scroll_to_line(&mut self, line: usize) {
         self.target_line = Some(line);
-        self.highlight_line = Some(line);
-        self.log_to_console(&format!("Scroll to and highlight line {}", line));
+        self.log_to_console(&format!("Scroll to line {}", line));
     }
 
     /// Find line number for a JSON path
@@ -197,11 +192,6 @@ impl JsonEditor {
         } else {
             None
         }
-    }
-
-    /// Set or clear line highlight
-    pub fn set_highlight_line(&mut self, line: Option<usize>) {
-        self.highlight_line = line;
     }
 
     /// Get and clear the clicked line (for one-time event handling)
@@ -494,38 +484,16 @@ impl JsonEditor {
                                     egui::vec2(line_number_width, line_height),
                                     egui::Layout::top_down(egui::Align::Max),
                                     |ui| {
-                                        // Highlight the selected line
-                                        let is_highlighted = self.highlight_line == Some(i);
-                                        let color = if is_highlighted {
-                                            egui::Color32::from_rgb(255, 200, 0) // Yellow highlight
-                                        } else {
-                                            egui::Color32::from_gray(128)
-                                        };
-
                                         // Make line number clickable
-                                        let line_label =
-                                            ui.selectable_label(false, format!("{:>4}", i));
-                                        line_label.widget_info(|| {
-                                            egui::WidgetInfo::labeled(
-                                                egui::WidgetType::Label,
-                                                true,
-                                                format!("Line {}", i),
-                                            )
-                                        });
-
-                                        // Change color after creating the widget
-                                        ui.painter().text(
-                                            line_label.rect.center(),
-                                            egui::Align2::CENTER_CENTER,
-                                            format!("{:>4}", i),
-                                            egui::FontId::proportional(12.0),
-                                            color,
+                                        let line_label = ui.selectable_label(
+                                            false,
+                                            egui::RichText::new(format!("{:>4}", i))
+                                                .color(egui::Color32::from_gray(128)),
                                         );
 
                                         // Detect click
                                         if line_label.clicked() {
                                             self.clicked_line = Some(i);
-                                            self.highlight_line = Some(i);
                                             self.log_to_console(&format!("Line {} clicked", i));
                                         }
                                     },

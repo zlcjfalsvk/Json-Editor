@@ -107,10 +107,7 @@ impl App {
                     && self.sync_editor_to_graph
                     && let Some(path) = self.json_editor.find_path_for_line(clicked_line)
                 {
-                    // Select node in graph
                     self.json_graph.select_by_path(&path);
-                    // Ensure the clicked line remains highlighted in editor
-                    self.json_editor.set_highlight_line(Some(clicked_line));
                     utils::log(
                         "App",
                         &format!(
@@ -149,19 +146,16 @@ impl App {
             let selection_changed = self.json_graph.ui(ui);
 
             // Sync graph selection to editor if enabled
-            if selection_changed && self.sync_graph_to_editor {
-                if let Some(path) = self.json_graph.get_selected_path() {
-                    if let Some(line) = self.json_editor.find_line_for_path(&path) {
-                        self.json_editor.scroll_to_line(line);
-                        utils::log(
-                            "App",
-                            &format!("Synced to editor: line {} (path: {:?})", line, path),
-                        );
-                    }
-                } else {
-                    // Selection cleared, clear highlight
-                    self.json_editor.set_highlight_line(None);
-                }
+            if selection_changed
+                && self.sync_graph_to_editor
+                && let Some(path) = self.json_graph.get_selected_path()
+                && let Some(line) = self.json_editor.find_line_for_path(&path)
+            {
+                self.json_editor.scroll_to_line(line);
+                utils::log(
+                    "App",
+                    &format!("Synced to editor: line {} (path: {:?})", line, path),
+                );
             }
         });
     }
