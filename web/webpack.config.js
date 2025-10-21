@@ -2,21 +2,26 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
-module.exports = {
-    entry: './index.js',
-    output: {
-        path: path.resolve(__dirname, 'dist'),
-        filename: 'bundle.js',
-        clean: true,
-    },
-    mode: 'development',
+module.exports = (env, argv) => {
+    const isProduction = argv.mode === 'production';
+    const publicPath = isProduction ? '/Json-Editor/' : '/';
+
+    return {
+        entry: './index.js',
+        output: {
+            path: path.resolve(__dirname, 'dist'),
+            filename: 'bundle.js',
+            publicPath: publicPath,
+            clean: true,
+        },
+        mode: argv.mode || 'development',
     experiments: {
         asyncWebAssembly: true,
     },
     plugins: [
         new HtmlWebpackPlugin({
             template: './index.html',
-            inject: false,
+            inject: 'body',
         }),
         new CopyWebpackPlugin({
             patterns: [
@@ -46,4 +51,5 @@ module.exports = {
         maxEntrypointSize: 512000,
         maxAssetSize: 512000,
     },
+    };
 };
