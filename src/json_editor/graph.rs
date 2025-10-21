@@ -152,8 +152,6 @@ pub enum ClickAction {
     EditCell(String, NodeType),
     /// Delete a row
     DeleteRow(String),
-    /// Add a new row
-    AddRow,
     /// Rename a key (Object properties only)
     RenameKey(String),
 }
@@ -651,7 +649,7 @@ impl JsonGraph {
                 }
 
                 // Show "..." if there are more rows
-                let bottom_y = if pairs.len() > max_visible_rows {
+                if pairs.len() > max_visible_rows {
                     let y = rect.min.y + header_height + (max_visible_rows as f32 * row_height);
                     painter.text(
                         Pos2::new(rect.center().x, y),
@@ -660,33 +658,7 @@ impl JsonGraph {
                         egui::FontId::proportional(font_size),
                         Color32::from_gray(200),
                     );
-                    y + row_height
-                } else {
-                    rect.min.y + header_height + (pairs.len() as f32 * row_height)
-                };
-
-                // Draw "Add Property" button at the bottom
-                let add_button_height = 20.0 * zoom;
-                let add_button_rect = Rect::from_min_size(
-                    Pos2::new(rect.min.x + 5.0, bottom_y + 5.0),
-                    Vec2::new(rect.width() - 10.0, add_button_height),
-                );
-
-                // Button background
-                painter.rect_filled(
-                    add_button_rect,
-                    3.0,
-                    Color32::from_rgb(60, 120, 80),
-                );
-
-                // Button text
-                painter.text(
-                    add_button_rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "+ Add Property",
-                    egui::FontId::proportional((10.0 * zoom).max(8.0)),
-                    Color32::WHITE,
-                );
+                }
             }
             NodeContent::Array(items) => {
                 // Draw header with label
@@ -796,7 +768,7 @@ impl JsonGraph {
                 }
 
                 // Show "..." if there are more rows
-                let bottom_y = if items.len() > max_visible_rows {
+                if items.len() > max_visible_rows {
                     let y = rect.min.y + header_height + (max_visible_rows as f32 * row_height);
                     painter.text(
                         Pos2::new(rect.center().x, y),
@@ -805,33 +777,7 @@ impl JsonGraph {
                         egui::FontId::proportional(font_size),
                         Color32::from_gray(200),
                     );
-                    y + row_height
-                } else {
-                    rect.min.y + header_height + (items.len() as f32 * row_height)
-                };
-
-                // Draw "Add Item" button at the bottom
-                let add_button_height = 20.0 * zoom;
-                let add_button_rect = Rect::from_min_size(
-                    Pos2::new(rect.min.x + 5.0, bottom_y + 5.0),
-                    Vec2::new(rect.width() - 10.0, add_button_height),
-                );
-
-                // Button background
-                painter.rect_filled(
-                    add_button_rect,
-                    3.0,
-                    Color32::from_rgb(60, 120, 80),
-                );
-
-                // Button text
-                painter.text(
-                    add_button_rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "+ Add Item",
-                    egui::FontId::proportional((10.0 * zoom).max(8.0)),
-                    Color32::WHITE,
-                );
+                }
             }
             NodeContent::Primitive(value) => {
                 // Simple text rendering for primitive values
@@ -992,22 +938,6 @@ impl JsonGraph {
 
                             self.log_to_console(&format!("Delete row: {}", key));
                             selection_changed = true;
-                        }
-                        ClickAction::AddRow => {
-                            // Show add property/item dialog
-                            let is_object = matches!(node.content, NodeContent::Object(_));
-                            self.adding_state = Some(AddingState {
-                                node_id: node.id,
-                                is_object,
-                                key: String::new(),
-                                value: String::new(),
-                                value_type: NodeType::String, // Default to string
-                            });
-                            self.log_to_console(if is_object {
-                                "Add property dialog opened"
-                            } else {
-                                "Add item dialog opened"
-                            });
                         }
                         ClickAction::RenameKey(old_key) => {
                             // Show rename key dialog
@@ -1578,21 +1508,6 @@ impl JsonGraph {
                 let key_column_width = rect.width() * 0.4;
                 let delete_button_x = rect.max.x - delete_button_size - 5.0;
 
-                // Check if clicking on "Add Property" button
-                let bottom_y = if pairs.len() > 10 {
-                    rect.min.y + header_height + (10.0 * row_height) + row_height
-                } else {
-                    rect.min.y + header_height + (pairs.len() as f32 * row_height)
-                };
-                let add_button_height = 20.0 * self.zoom;
-                if click_pos.y >= bottom_y + 5.0
-                    && click_pos.y <= bottom_y + 5.0 + add_button_height
-                    && click_pos.x >= rect.min.x + 5.0
-                    && click_pos.x <= rect.max.x - 5.0
-                {
-                    return Some(ClickAction::AddRow);
-                }
-
                 // Check if clicking within a valid row
                 if row_index < max_visible_rows {
                     let pair = &pairs[row_index];
@@ -1630,21 +1545,6 @@ impl JsonGraph {
                 let max_visible_rows = items.len().min(10);
                 let index_column_width = 40.0 * self.zoom;
                 let delete_button_x = rect.max.x - delete_button_size - 5.0;
-
-                // Check if clicking on "Add Item" button
-                let bottom_y = if items.len() > 10 {
-                    rect.min.y + header_height + (10.0 * row_height) + row_height
-                } else {
-                    rect.min.y + header_height + (items.len() as f32 * row_height)
-                };
-                let add_button_height = 20.0 * self.zoom;
-                if click_pos.y >= bottom_y + 5.0
-                    && click_pos.y <= bottom_y + 5.0 + add_button_height
-                    && click_pos.x >= rect.min.x + 5.0
-                    && click_pos.x <= rect.max.x - 5.0
-                {
-                    return Some(ClickAction::AddRow);
-                }
 
                 // Check if clicking within a valid row
                 if row_index < max_visible_rows {
@@ -1701,31 +1601,10 @@ impl JsonGraph {
             NodeContent::Object(pairs) => {
                 let max_visible_rows = pairs.len().min(10);
 
-                // Check if clicking on "Add Property" button area
-                let bottom_y = if pairs.len() > 10 {
-                    rect.min.y + header_height + (10.0 * row_height) + row_height
-                } else {
-                    rect.min.y + header_height + (pairs.len() as f32 * row_height)
-                };
-                let add_button_height = 20.0 * self.zoom;
-                if click_pos.y >= bottom_y + 5.0
-                    && click_pos.y <= bottom_y + 5.0 + add_button_height
-                {
-                    // Context menu for adding (container level)
-                    return Some(ContextMenuState {
-                        node_id: node.id,
-                        row_key: None,
-                        is_object: true,
-                        is_primitive: false,
-                        value_type: None,
-                        position: Pos2::ZERO, // Will be set by caller
-                    });
-                }
-
                 // Check if clicking within a valid row
                 if row_index < max_visible_rows {
                     let pair = &pairs[row_index];
-                    return Some(ContextMenuState {
+                    Some(ContextMenuState {
                         node_id: node.id,
                         row_key: Some(pair.key.clone()),
                         is_object: true,
@@ -1736,37 +1615,26 @@ impl JsonGraph {
                             None
                         },
                         position: Pos2::ZERO, // Will be set by caller
-                    });
+                    })
+                } else {
+                    // Clicking in empty space below rows - show Add menu
+                    Some(ContextMenuState {
+                        node_id: node.id,
+                        row_key: None,
+                        is_object: true,
+                        is_primitive: false,
+                        value_type: None,
+                        position: Pos2::ZERO, // Will be set by caller
+                    })
                 }
             }
             NodeContent::Array(items) => {
                 let max_visible_rows = items.len().min(10);
 
-                // Check if clicking on "Add Item" button area
-                let bottom_y = if items.len() > 10 {
-                    rect.min.y + header_height + (10.0 * row_height) + row_height
-                } else {
-                    rect.min.y + header_height + (items.len() as f32 * row_height)
-                };
-                let add_button_height = 20.0 * self.zoom;
-                if click_pos.y >= bottom_y + 5.0
-                    && click_pos.y <= bottom_y + 5.0 + add_button_height
-                {
-                    // Context menu for adding (container level)
-                    return Some(ContextMenuState {
-                        node_id: node.id,
-                        row_key: None,
-                        is_object: false,
-                        is_primitive: false,
-                        value_type: None,
-                        position: Pos2::ZERO, // Will be set by caller
-                    });
-                }
-
                 // Check if clicking within a valid row
                 if row_index < max_visible_rows {
                     let item = &items[row_index];
-                    return Some(ContextMenuState {
+                    Some(ContextMenuState {
                         node_id: node.id,
                         row_key: Some(item.index.to_string()),
                         is_object: false,
@@ -1777,16 +1645,24 @@ impl JsonGraph {
                             None
                         },
                         position: Pos2::ZERO, // Will be set by caller
-                    });
+                    })
+                } else {
+                    // Clicking in empty space below rows - show Add menu
+                    Some(ContextMenuState {
+                        node_id: node.id,
+                        row_key: None,
+                        is_object: false,
+                        is_primitive: false,
+                        value_type: None,
+                        position: Pos2::ZERO, // Will be set by caller
+                    })
                 }
             }
             NodeContent::Primitive(_) => {
                 // Primitive nodes don't have rows
-                return None;
+                None
             }
         }
-
-        None
     }
 
     /// Validate a value based on its type
