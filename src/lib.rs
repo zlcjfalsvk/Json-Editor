@@ -24,8 +24,8 @@ pub fn start() {
     // Set panic hook for better error messages
     console_error_panic_hook::set_once();
 
-    // Initialize logger
-    console_log::init_with_level(log::Level::Info).expect("Failed to initialize logger");
+    // Initialize logger with Debug level for detailed logging
+    console_log::init_with_level(log::Level::Debug).expect("Failed to initialize logger");
 
     log::info!("WASM application starting...");
 }

@@ -96,6 +96,14 @@ impl<'a> State<'a> {
     pub async fn new(window: &'a Window) -> Self {
         let size = window.inner_size();
 
+        // Ensure minimum size to prevent 0-sized surface
+        let size = PhysicalSize::new(
+            size.width.max(1),
+            size.height.max(1),
+        );
+
+        log::info!("Creating State with size: {}x{}", size.width, size.height);
+
         // Create wgpu instance
         #[cfg(target_arch = "wasm32")]
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -245,6 +253,12 @@ impl<'a> State<'a> {
     ///
     /// Result indicating success or error
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        // Skip rendering if surface has zero size
+        if self.config.width == 0 || self.config.height == 0 {
+            log::warn!("Skipping render: surface size is 0 ({}x{})", self.config.width, self.config.height);
+            return Ok(());
+        }
+
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
