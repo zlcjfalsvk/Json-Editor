@@ -117,6 +117,17 @@ pub struct AddingState {
     pub value_type: NodeType,
 }
 
+/// State for renaming a property key
+#[derive(Debug, Clone)]
+pub struct RenamingKey {
+    /// Node ID being edited
+    pub node_id: usize,
+    /// Old key name
+    pub old_key: String,
+    /// New key name being edited
+    pub new_key: String,
+}
+
 /// Clicked action on a node
 #[derive(Debug, Clone)]
 pub enum ClickAction {
@@ -126,6 +137,8 @@ pub enum ClickAction {
     DeleteRow(String),
     /// Add a new row
     AddRow,
+    /// Rename a key (Object properties only)
+    RenameKey(String),
 }
 
 /// Type of modification operation
@@ -137,6 +150,8 @@ pub enum ModifyOperation {
     Delete,
     /// Add a new property (for Objects) or item (for Arrays)
     Add { key: String, value: String },
+    /// Rename a property key (Object properties only)
+    Rename { old_key: String, new_key: String },
 }
 
 /// Result of a completed modification operation
@@ -165,6 +180,8 @@ pub struct JsonGraph {
     editing_cell: Option<EditingCell>,
     /// Currently adding a new property/item (if any)
     adding_state: Option<AddingState>,
+    /// Currently renaming a key (if any)
+    renaming_key: Option<RenamingKey>,
     /// Pending edit result to be processed by App
     pending_edit: Option<EditResult>,
 }
@@ -181,6 +198,7 @@ impl Default for JsonGraph {
             selected_node: None,
             editing_cell: None,
             adding_state: None,
+            renaming_key: None,
             pending_edit: None,
         }
     }
@@ -199,6 +217,7 @@ impl JsonGraph {
         self.selected_node = None;
         self.editing_cell = None; // Cancel any ongoing edits
         self.adding_state = None; // Cancel any ongoing adds
+        self.renaming_key = None; // Cancel any ongoing renames
         self.pending_edit = None; // Clear any pending edits
 
         if value.is_null() {
@@ -616,7 +635,7 @@ impl JsonGraph {
                     painter.text(
                         Pos2::new(rect.center().x, y),
                         egui::Align2::CENTER_CENTER,
-                        &format!("... {} more", pairs.len() - max_visible_rows),
+                        format!("... {} more", pairs.len() - max_visible_rows),
                         egui::FontId::proportional(font_size),
                         Color32::from_gray(200),
                     );
@@ -704,7 +723,7 @@ impl JsonGraph {
                     painter.text(
                         Pos2::new(index_rect.center().x, index_rect.center().y),
                         egui::Align2::CENTER_CENTER,
-                        &format!("[{}]", item.index),
+                        format!("[{}]", item.index),
                         egui::FontId::monospace(font_size),
                         Color32::from_gray(200),
                     );
@@ -761,7 +780,7 @@ impl JsonGraph {
                     painter.text(
                         Pos2::new(rect.center().x, y),
                         egui::Align2::CENTER_CENTER,
-                        &format!("... {} more", items.len() - max_visible_rows),
+                        format!("... {} more", items.len() - max_visible_rows),
                         egui::FontId::proportional(font_size),
                         Color32::from_gray(200),
                     );
@@ -957,6 +976,15 @@ impl JsonGraph {
                                 "Add item dialog opened"
                             });
                         }
+                        ClickAction::RenameKey(old_key) => {
+                            // Show rename key dialog
+                            self.renaming_key = Some(RenamingKey {
+                                node_id: node.id,
+                                old_key: old_key.clone(),
+                                new_key: old_key.clone(), // Start with the old key
+                            });
+                            self.log_to_console(&format!("Rename key dialog opened: {}", old_key));
+                        }
                     }
                 } else {
                     // Just select the node
@@ -1096,24 +1124,24 @@ impl JsonGraph {
             // Validate first
             if let Some(validated_value) = Self::validate_value(&text, &value_type) {
                 // Then update
-                if let Some(node) = self.nodes.iter_mut().find(|n| n.id == node_id) {
-                    if Self::update_cell_value(node, &key, &validated_value) {
-                        // Build complete JSON path for this edit
-                        let mut json_path = node.json_path.clone();
-                        json_path.push(key.clone());
+                if let Some(node) = self.nodes.iter_mut().find(|n| n.id == node_id)
+                    && Self::update_cell_value(node, &key, &validated_value)
+                {
+                    // Build complete JSON path for this edit
+                    let mut json_path = node.json_path.clone();
+                    json_path.push(key.clone());
 
-                        // Store edit result for App to process
-                        self.pending_edit = Some(EditResult {
-                            json_path,
-                            operation: ModifyOperation::Update {
-                                new_value: validated_value.clone(),
-                            },
-                        });
+                    // Store edit result for App to process
+                    self.pending_edit = Some(EditResult {
+                        json_path,
+                        operation: ModifyOperation::Update {
+                            new_value: validated_value.clone(),
+                        },
+                    });
 
-                        self.log_to_console(&format!("Saved edit: {} = {}", key, text));
-                        close_window = true;
-                        selection_changed = true; // Trigger synchronization
-                    }
+                    self.log_to_console(&format!("Saved edit: {} = {}", key, text));
+                    close_window = true;
+                    selection_changed = true; // Trigger synchronization
                 }
             } else {
                 self.log_to_console("Validation failed");
@@ -1300,6 +1328,95 @@ impl JsonGraph {
             self.adding_state = None;
         }
 
+        // Show renaming dialog if renaming a key
+        let mut close_rename_dialog = false;
+        let mut save_rename = false;
+        let mut rename_data: Option<(usize, String, String)> = None;
+
+        if let Some(renaming) = &mut self.renaming_key {
+            egui::Window::new("Rename Property")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ui.ctx(), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Old Name:");
+                        ui.label(&renaming.old_key);
+                    });
+
+                    ui.separator();
+
+                    ui.label("New Name:");
+                    let key_response = ui.add(
+                        egui::TextEdit::singleline(&mut renaming.new_key)
+                            .desired_width(300.0)
+                            .font(egui::TextStyle::Monospace),
+                    );
+
+                    // Auto-focus on first show
+                    if !key_response.has_focus() {
+                        key_response.request_focus();
+                    }
+
+                    // Handle Enter/ESC
+                    if key_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        save_rename = true;
+                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        close_rename_dialog = true;
+                    }
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Rename").clicked() {
+                            save_rename = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close_rename_dialog = true;
+                        }
+                    });
+                });
+
+            // Extract data for later use
+            if save_rename {
+                rename_data = Some((
+                    renaming.node_id,
+                    renaming.old_key.clone(),
+                    renaming.new_key.clone(),
+                ));
+            }
+        }
+
+        // Process rename outside of the borrow
+        if let Some((node_id, old_key, new_key)) = rename_data {
+            // Validate new key is not empty
+            if new_key.is_empty() {
+                self.log_to_console("Property name cannot be empty");
+            } else if new_key == old_key {
+                self.log_to_console("New name is the same as old name");
+                close_rename_dialog = true;
+            } else {
+                // Find the node to get its path
+                if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
+                    let json_path = node.json_path.clone();
+
+                    // Create the rename operation
+                    self.pending_edit = Some(EditResult {
+                        json_path,
+                        operation: ModifyOperation::Rename { old_key, new_key: new_key.clone() },
+                    });
+
+                    self.log_to_console(&format!("Renamed property to: {}", new_key));
+                    close_rename_dialog = true;
+                    selection_changed = true;
+                }
+            }
+        }
+
+        if close_rename_dialog {
+            self.renaming_key = None;
+        }
+
         selection_changed
     }
 
@@ -1359,6 +1476,13 @@ impl JsonGraph {
                     .sqrt();
                     if distance <= delete_button_size / 2.0 {
                         return Some(ClickAction::DeleteRow(pair.key.clone()));
+                    }
+
+                    // Check if clicking on key column for renaming
+                    if click_pos.x >= rect.min.x + 5.0
+                        && click_pos.x <= rect.min.x + key_column_width - 5.0
+                    {
+                        return Some(ClickAction::RenameKey(pair.key.clone()));
                     }
 
                     // Check if clicking on value column for editing (only primitives)
@@ -1479,11 +1603,11 @@ impl JsonGraph {
                 }
             }
             NodeContent::Array(items) => {
-                if let Ok(index) = key.parse::<usize>() {
-                    if let Some(item) = items.get_mut(index) {
-                        item.value_display = validated_value.to_string();
-                        return true;
-                    }
+                if let Ok(index) = key.parse::<usize>()
+                    && let Some(item) = items.get_mut(index)
+                {
+                    item.value_display = validated_value.to_string();
+                    return true;
                 }
             }
             NodeContent::Primitive(_) => {

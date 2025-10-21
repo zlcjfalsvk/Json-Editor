@@ -135,6 +135,17 @@ impl App {
                         self.json_editor
                             .add_value_at_path(&edit_result.json_path, key, value)
                     }
+                    ModifyOperation::Rename { ref old_key, ref new_key } => {
+                        utils::log(
+                            "App",
+                            &format!(
+                                "Processing graph rename: {:?} {} -> {}",
+                                edit_result.json_path, old_key, new_key
+                            ),
+                        );
+                        self.json_editor
+                            .rename_key_at_path(&edit_result.json_path, old_key, new_key)
+                    }
                 };
 
                 if success {
