@@ -1,6 +1,15 @@
 use crate::utils;
 use serde_json::Value;
 
+/// View mode for JSON editor
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ViewMode {
+    /// Raw text editor mode
+    Text,
+    /// Tree view with folding
+    Tree,
+}
+
 /// JSON Editor state and functionality
 pub struct JsonEditor {
     /// The raw JSON text being edited
@@ -27,6 +36,8 @@ pub struct JsonEditor {
     target_line: Option<usize>,
     /// Clicked line number (for editor-to-graph sync)
     clicked_line: Option<usize>,
+    /// Current view mode
+    view_mode: ViewMode,
 }
 
 impl Default for JsonEditor {
@@ -59,6 +70,7 @@ impl Default for JsonEditor {
             show_line_numbers: true,
             target_line: None,
             clicked_line: None,
+            view_mode: ViewMode::Text,
         }
     }
 }
@@ -84,6 +96,7 @@ impl JsonEditor {
             show_line_numbers: true,
             target_line: None,
             clicked_line: None,
+            view_mode: ViewMode::Text,
         };
         editor.validate();
         editor
@@ -322,6 +335,92 @@ impl JsonEditor {
         self.indent_size
     }
 
+    /// Toggle view mode between Text and Tree
+    pub fn toggle_view_mode(&mut self) {
+        self.view_mode = match self.view_mode {
+            ViewMode::Text => ViewMode::Tree,
+            ViewMode::Tree => ViewMode::Text,
+        };
+        self.log_to_console(&format!("View mode: {:?}", self.view_mode));
+    }
+
+    /// Render JSON tree view recursively
+    #[allow(clippy::only_used_in_recursion)]
+    fn render_tree_view(&self, ui: &mut egui::Ui, value: &Value, key: Option<&str>, path: String) {
+        match value {
+            Value::Object(map) => {
+                let header_text = if let Some(k) = key {
+                    format!("{}: {{ {} items }}", k, map.len())
+                } else {
+                    format!("{{ {} items }}", map.len())
+                };
+
+                egui::CollapsingHeader::new(header_text)
+                    .id_salt(path.clone())
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        for (k, v) in map {
+                            let new_path = if path.is_empty() {
+                                k.clone()
+                            } else {
+                                format!("{}.{}", path, k)
+                            };
+                            self.render_tree_view(ui, v, Some(k), new_path);
+                        }
+                    });
+            }
+            Value::Array(arr) => {
+                let header_text = if let Some(k) = key {
+                    format!("{}: [ {} items ]", k, arr.len())
+                } else {
+                    format!("[ {} items ]", arr.len())
+                };
+
+                egui::CollapsingHeader::new(header_text)
+                    .id_salt(path.clone())
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        for (idx, v) in arr.iter().enumerate() {
+                            let new_path = format!("{}[{}]", path, idx);
+                            self.render_tree_view(ui, v, Some(&format!("[{}]", idx)), new_path);
+                        }
+                    });
+            }
+            Value::String(s) => {
+                let text = if let Some(k) = key {
+                    format!("{}: \"{}\"", k, s)
+                } else {
+                    format!("\"{}\"", s)
+                };
+                ui.label(egui::RichText::new(text).color(egui::Color32::from_rgb(100, 200, 100)));
+            }
+            Value::Number(n) => {
+                let text = if let Some(k) = key {
+                    format!("{}: {}", k, n)
+                } else {
+                    format!("{}", n)
+                };
+                ui.label(egui::RichText::new(text).color(egui::Color32::from_rgb(200, 150, 100)));
+            }
+            Value::Bool(b) => {
+                let text = if let Some(k) = key {
+                    format!("{}: {}", k, b)
+                } else {
+                    format!("{}", b)
+                };
+                ui.label(egui::RichText::new(text).color(egui::Color32::from_rgb(200, 100, 150)));
+            }
+            Value::Null => {
+                let text = if let Some(k) = key {
+                    format!("{}: null", k)
+                } else {
+                    "null".to_string()
+                };
+                ui.label(egui::RichText::new(text).color(egui::Color32::from_gray(150)));
+            }
+        }
+    }
+
     /// Log message to browser console (WASM) or stdout (desktop)
     fn log_to_console(&self, message: &str) {
         utils::log("JSON Editor", message);
@@ -374,17 +473,30 @@ impl JsonEditor {
 
         // Toolbar
         ui.horizontal(|ui| {
-            // Format buttons
-            if ui.button("Pretty").clicked() && self.is_valid() {
-                self.push_undo();
-                self.apply_pretty_print();
-                changed = true;
+            // View mode toggle
+            let view_text = match self.view_mode {
+                ViewMode::Text => "📝 Text",
+                ViewMode::Tree => "🌲 Tree",
+            };
+            if ui.button(view_text).clicked() {
+                self.toggle_view_mode();
             }
 
-            if ui.button("Compact").clicked() && self.is_valid() {
-                self.push_undo();
-                self.apply_compact();
-                changed = true;
+            ui.separator();
+
+            // Format buttons (only in text mode)
+            if self.view_mode == ViewMode::Text {
+                if ui.button("Pretty").clicked() && self.is_valid() {
+                    self.push_undo();
+                    self.apply_pretty_print();
+                    changed = true;
+                }
+
+                if ui.button("Compact").clicked() && self.is_valid() {
+                    self.push_undo();
+                    self.apply_compact();
+                    changed = true;
+                }
             }
 
             ui.separator();
@@ -408,20 +520,20 @@ impl JsonEditor {
 
             ui.separator();
 
-            ui.separator();
+            // Line numbers toggle (only in text mode)
+            if self.view_mode == ViewMode::Text {
+                if ui
+                    .checkbox(&mut self.show_line_numbers, "Line Numbers")
+                    .clicked()
+                {
+                    self.log_to_console(&format!(
+                        "Line numbers: {}",
+                        if self.show_line_numbers { "on" } else { "off" }
+                    ));
+                }
 
-            // Line numbers toggle
-            if ui
-                .checkbox(&mut self.show_line_numbers, "Line Numbers")
-                .clicked()
-            {
-                self.log_to_console(&format!(
-                    "Line numbers: {}",
-                    if self.show_line_numbers { "on" } else { "off" }
-                ));
+                ui.separator();
             }
-
-            ui.separator();
 
             // Validation status
             if self.is_valid() {
@@ -438,6 +550,39 @@ impl JsonEditor {
             ui.colored_label(egui::Color32::RED, error);
         }
 
+        // Render based on view mode
+        match self.view_mode {
+            ViewMode::Tree => {
+                // Tree view with folding
+                if let Some(value) = &self.parsed_value {
+                    egui::ScrollArea::vertical()
+                        .max_height(ui.available_height())
+                        .show(ui, |ui| {
+                            self.render_tree_view(ui, value, None, String::new());
+                        });
+                } else {
+                    ui.colored_label(
+                        egui::Color32::RED,
+                        "Invalid JSON - cannot display tree view",
+                    );
+                }
+            }
+            ViewMode::Text => {
+                // Original text editor view
+                self.render_text_editor(ui, &mut changed, text_edit_id);
+            }
+        }
+
+        changed
+    }
+
+    /// Render the text editor mode
+    fn render_text_editor(
+        &mut self,
+        ui: &mut egui::Ui,
+        changed: &mut bool,
+        text_edit_id: egui::Id,
+    ) {
         // Editor area with line numbers - use all available height
         let available_height = ui.available_height();
 
@@ -530,7 +675,7 @@ impl JsonEditor {
                     let was_valid = self.is_valid();
                     self.validate();
                     self.log_to_console("Text changed");
-                    changed = true;
+                    *changed = true;
 
                     // If validation failed, maintain focus on the text editor
                     if !self.is_valid() && was_valid {
@@ -540,8 +685,6 @@ impl JsonEditor {
                 }
             });
         });
-
-        changed
     }
 }
 
