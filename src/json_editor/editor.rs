@@ -525,6 +525,7 @@ impl JsonEditor {
                                         // Detect click
                                         if line_label.clicked() {
                                             self.clicked_line = Some(i);
+                                            self.highlight_line = Some(i);
                                             self.log_to_console(&format!("Line {} clicked", i));
                                         }
                                     },

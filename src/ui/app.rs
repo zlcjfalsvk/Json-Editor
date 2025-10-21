@@ -107,7 +107,10 @@ impl App {
                     && self.sync_editor_to_graph
                     && let Some(path) = self.json_editor.find_path_for_line(clicked_line)
                 {
+                    // Select node in graph
                     self.json_graph.select_by_path(&path);
+                    // Ensure the clicked line remains highlighted in editor
+                    self.json_editor.set_highlight_line(Some(clicked_line));
                     utils::log(
                         "App",
                         &format!(
